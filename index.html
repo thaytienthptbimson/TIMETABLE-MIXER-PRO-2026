@@ -87,7 +87,7 @@
                             <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Tổ trưởng"><span>Tổ trưởng (+3)</span></label>
                             <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Tổ phó"><span>Tổ phó (+1)</span></label>
                             <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Bí thư Đoàn"><span>BT Đoàn (+6)</span></label>
-                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Công đoàn"><span>Công đoàn (+3)</span></label>
+                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Phó BT Đoàn"><span>Phó BT Đoàn (+2)</span></label>
                         </div>
                     </div>
 
@@ -115,7 +115,6 @@
                         <p id="data-summary" class="text-xs text-gray-500 mt-1"></p>
                     </div>
                     
-                    <!-- PHẦN BUTTONS ĐÃ ĐƯỢC CHỈNH SỬA Ở ĐÂY -->
                     <div class="flex gap-2 items-center flex-wrap justify-end">
                         <button onclick="downloadExcelTemplate()" class="text-sm bg-green-100 text-green-700 border border-green-200 px-3 py-1.5 rounded hover:bg-green-200 transition font-medium shadow-sm" title="Tải file Excel mẫu">
                             <i class="fa-solid fa-file-excel mr-1"></i>File Mẫu
@@ -134,7 +133,6 @@
                             <i class="fa-solid fa-trash mr-1"></i>Xóa Hệ thống
                         </button>
                     </div>
-                    <!-- KẾT THÚC PHẦN CHỈNH SỬA -->
 
                 </div>
                 <div class="overflow-x-auto">
@@ -184,7 +182,10 @@
                         <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm">
                             <label class="flex items-start cursor-pointer text-blue-900">
                                 <input type="checkbox" checked disabled class="mt-0.5 mr-2 rounded text-blue-600"> 
-                                <span class="font-semibold">Chỉ xếp tiết Sáng (T2-T7)</span>
+                                <div>
+                                    <span class="font-semibold">Chỉ xếp Sáng (T2-T7)</span>
+                                    <p class="text-[11px] text-blue-700 mt-1 leading-tight">AI sẽ tự động dồn lịch để xếp kín 5 tiết/sáng, chống trống tiết.</p>
+                                </div>
                             </label>
                         </div>
                         <div class="p-3 hover:bg-gray-50 border rounded-lg text-sm transition">
@@ -360,7 +361,7 @@
 
     <!-- SCRIPTS -->
     <script>
-        const DUTY_PERIODS = { "GVCN": 4, "Bí thư Đoàn": 6, "Tổ phó": 1, "Tổ trưởng": 3, "Phó BT Đoàn": 2, "Công đoàn": 3 };
+        const DUTY_PERIODS = { "GVCN": 4, "Bí thư Đoàn": 6, "Tổ phó": 1, "Tổ trưởng": 3, "Phó BT Đoàn": 2 };
         const DAYS = ['t2', 't3', 't4', 't5', 't6', 't7'];
         const PERIODS = ['s1', 's2', 's3', 's4', 's5'];
         const DEFAULT_DEPTS = ['Tổ Toán - Tin', 'Tổ Ngữ văn', 'Tổ Ngoại ngữ', 'Tổ Lý - Hóa - Sinh'];
@@ -601,12 +602,27 @@
                 const i = PERIODS.indexOf(p);
                 return [PERIODS[i - 1], PERIODS[i + 1]].some(q => { if (!q) return false; const o = cSlot.get(key(L.cls, d, q)); return o && o.subject === L.subject; });
             };
+            
+            // XẾP KÍN 5 TIẾT: Phạt cực nặng các trường hợp sinh ra khoảng trống
             const scoreSlot = (L, d, p) => {
                 const idx = PERIODS.indexOf(p);
-                let holes = 0;
-                for (let i = 0; i < idx; i++) if (!cSlot.has(key(L.cls, d, PERIODS[i]))) holes++;
-                let sc = Math.random() * 2 + 3 * (classDay.get(`${L.cls}|${d}`) || 0) + 2 * (teacherDay.get(`${L.teacher}|${d}`) || 0) + 40 * (subjDay.get(`${L.cls}|${L.subject}|${d}`) || 0) + 4 * holes + 0.3 * idx;
-                if (opts.noConsec && adjacentSame(L, d, p)) sc += 1000;
+                let clsHoles = 0, tchHoles = 0;
+                
+                // Đếm số tiết trống phía trước tiết p hiện tại
+                for (let i = 0; i < idx; i++) {
+                    if (!cSlot.has(key(L.cls, d, PERIODS[i]))) clsHoles++;
+                    if (!tSlot.has(key(L.teacher, d, PERIODS[i]))) tchHoles++;
+                }
+                
+                let sc = Math.random() * 2 
+                    + 5 * (classDay.get(`${L.cls}|${d}`) || 0) // Cân bằng tải các ngày
+                    + 2 * (teacherDay.get(`${L.teacher}|${d}`) || 0)
+                    + 100 * (subjDay.get(`${L.cls}|${L.subject}|${d}`) || 0) // Hạn chế dạy 1 môn 2 lần/ngày nếu không phải tiết liền
+                    + 50 * clsHoles // PHẠT RẤT NẶNG trống tiết của học sinh (xếp kín)
+                    + 20 * tchHoles // Phạt nặng trống tiết của Giáo viên
+                    + 5 * idx; // Ưu tiên xếp đẩy lên các tiết s1, s2 trước
+                    
+                if (opts.noConsec && adjacentSame(L, d, p)) sc += 2000;
                 return sc;
             };
 
