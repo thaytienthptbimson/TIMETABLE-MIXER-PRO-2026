@@ -36,6 +36,19 @@
         .free-slot { height: 100%; min-height: 40px; display: flex; align-items: center; justify-content: center; border: 1px dashed #86efac; border-radius: 6px; background: #f0fdf4; color: #16a34a; font-size: 11px; font-weight: 600; }
         .free-cell { background: #dcfce7; color: #15803d; }
         .free-col-sel { box-shadow: inset 2px 0 0 #1e3a8a, inset -2px 0 0 #1e3a8a; }
+        .draggable { position: relative; }
+        .unplace-btn { display: none; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; align-items: center; justify-content: center; font-size: 9px; line-height: 1; border-radius: 9999px; background: #fff; color: #dc2626; border: 1px solid #fecaca; }
+        .draggable:hover .unplace-btn { display: flex; }
+        .drop-zone.pool-ok { background-color: #dcfce7; box-shadow: inset 0 0 0 2px #22c55e; }
+        .drop-zone.pool-bad { background-color: #fef2f2; }
+        .place-btn { width: 100%; height: 100%; min-height: 40px; border-radius: 6px; background: #16a34a; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .place-btn:hover { background: #15803d; }
+        .slot-busy { font-size: 10px; color: #dc2626; text-align: center; padding: 6px 2px; line-height: 1.25; }
+        .free-chip { display: block; width: 100%; text-align: left; padding: 2px 6px; margin-bottom: 2px; border-radius: 4px; font-size: 10px; font-weight: 600; background: #f0fdf4; color: #15803d; border: 1px solid #86efac; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .free-chip:hover { background: #16a34a; color: #fff; }
+        .pool-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; cursor: pointer; background: #fff; margin-bottom: 6px; }
+        .pool-item:hover { border-color: #93c5fd; }
+        .pool-item.pool-active { border-color: #16a34a; background: #f0fdf4; box-shadow: 0 0 0 2px #bbf7d0; }
         .free-th-btn { cursor: pointer; }
         .free-th-btn:hover { background: #dbeafe; }
     </style>
@@ -176,8 +189,8 @@
                     <h3 class="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-sliders mr-2"></i>Chế độ xếp lịch</h3>
                     
                     <div class="flex bg-gray-100 p-1 rounded-lg mb-5 shadow-inner">
-                        <button onclick="setMode('auto')" id="btn-mode-auto" class="flex-1 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700 transition">Tự động (AI)</button>
-                        <button onclick="setMode('manual')" id="btn-mode-manual" class="flex-1 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 transition bg-transparent">Thủ công</button>
+                        <button onclick="userSetMode('auto')" id="btn-mode-auto" class="flex-1 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700 transition">Tự động (AI)</button>
+                        <button onclick="userSetMode('manual')" id="btn-mode-manual" class="flex-1 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 transition bg-transparent">Thủ công</button>
                     </div>
 
                     <div id="mode-auto-settings" class="space-y-4">
@@ -226,9 +239,16 @@
                         <i class="fa-solid fa-hand-pointer text-3xl mb-3 text-gray-300"></i>
                         <p>Chế độ <b>Xếp Thủ Công</b>.</p>
                         <p class="mt-2 text-xs">Sử dụng chuột bấm giữ và kéo thả các ô tiết học ở Bảng để hoán đổi cho nhau.</p>
-                        <p class="mt-2 text-xs text-left leading-relaxed">Khi đang kéo một tiết, ô <b class="text-green-600">xanh lá</b> là tiết trống chuyển được, ô <b class="text-violet-600">tím</b> là đổi chỗ được, ô <b class="text-red-500">đỏ</b> là bị trùng GV hoặc lớp.</p>
+                        <p class="mt-2 text-xs text-left leading-relaxed">Tiết nào chưa xếp thì chọn ở mục <b>Tiết cần xếp</b> bên dưới; bảng sẽ cho thấy ô nào giáo viên đang trống. Khi đang kéo một tiết, ô <b class="text-green-600">xanh lá</b> là tiết trống chuyển được, ô <b class="text-violet-600">tím</b> là đổi chỗ được, ô <b class="text-red-500">đỏ</b> là bị trùng GV hoặc lớp.</p>
                         <p class="mt-3 text-[10px] text-green-600 font-bold bg-green-100 rounded px-2 py-1"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Tự động lưu khi kéo thả</p>
                     </div>
+                </div>
+
+                <div class="p-5 border-b" id="pool-panel">
+                    <h3 class="font-bold text-gray-800 mb-2 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-list-check mr-2"></i>Tiết cần xếp</h3>
+                    <p id="pool-head" class="text-xs text-gray-600 mb-2"></p>
+                    <div id="pool-list"></div>
+                    <p class="text-[11px] text-gray-400 mt-1 leading-snug">Bấm chọn một tiết rồi bấm vào ô xanh trong bảng, hoặc kéo tiết thả vào ô trống. Khi chưa chọn, mỗi ô trống của lớp liệt kê các GV đang rảnh để bấm xếp luôn. Rê chuột vào tiết đã xếp rồi bấm dấu x để gỡ về danh sách.</p>
                 </div>
 
                 <div class="p-5 border-b" id="free-panel">
@@ -419,6 +439,8 @@
         let idCounter = 0;
         let toastTimer = null;
         let freeTeacher = '';
+        let currentMode = 'auto';
+        let poolList = [], poolSel = null, tBusyIdx = new Map(), cBusyIdx = new Map();
         let freeSlotSel = null;
 
         const $ = id => document.getElementById(id);
@@ -480,7 +502,10 @@
             else renderDataSummary();
         }
 
+        function userSetMode(mode) { setMode(mode); renderTimetable(); }
+        function startManual() { setMode('manual'); renderTimetable(); }
         function setMode(mode) {
+            currentMode = mode;
             const btnAuto = $('btn-mode-auto'), btnManual = $('btn-mode-manual');
             const setAuto = $('mode-auto-settings'), setManual = $('mode-manual-settings');
             if (mode === 'auto') {
@@ -791,13 +816,14 @@
             const selectedVal = sel.value;
             $('lbl-current-class').innerText = selectedVal ? (viewType === 'class' ? `Lớp ${selectedVal}` : `Giáo viên: ${selectedVal}`) : "Chưa chọn dữ liệu";
             const tbody = $('tkb-body'), hasData = buildLessons().length > 0;
+            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel();
 
             if (!hasData) {
                 tbody.innerHTML = `<tr><td colspan="8" class="p-16 text-center text-gray-500 bg-gray-50 h-[400px] border-b border-gray-200"><h3 class="text-2xl font-bold text-gray-700 mb-2">Chưa có dữ liệu phân công</h3><button onclick="switchView('data-entry')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition">Đi tới Nhập Dữ Liệu</button></td></tr>`;
                 return;
             }
-            if (globalSchedule.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="p-16 text-center text-gray-500 bg-gray-50 h-[400px] border-b border-gray-200"><h3 class="text-2xl font-bold text-gray-700 mb-2">Chưa có Thời Khóa Biểu</h3><button onclick="runAutoSchedule()" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transition transform hover:scale-105">XẾP TKB TỪ DỮ LIỆU ĐÃ NHẬP</button></td></tr>`;
+            if (globalSchedule.length === 0 && currentMode !== 'manual') {
+                tbody.innerHTML = `<tr><td colspan="8" class="p-16 text-center text-gray-500 bg-gray-50 h-[400px] border-b border-gray-200"><h3 class="text-2xl font-bold text-gray-700 mb-2">Chưa có Thời Khóa Biểu</h3><button onclick="runAutoSchedule()" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transition transform hover:scale-105">XẾP TKB TỪ DỮ LIỆU ĐÃ NHẬP</button><div class="mt-4"><button onclick="startManual()" class="text-blue-700 font-semibold border border-blue-300 bg-white hover:bg-blue-50 py-2 px-5 rounded-full transition"><i class="fa-solid fa-hand-pointer mr-2"></i>Hoặc tự xếp thủ công từ đầu</button></div></td></tr>`;
                 return;
             }
 
@@ -808,13 +834,14 @@
                 html += `<td class="w-16 min-w-[64px] border-b border-r bg-gray-50 sticky-col font-medium shadow-[1px_0_0_#e5e7eb]" style="left:64px;">Tiết ${i}</td>`;
                 DAYS.forEach(day => {
                     const cellData = selectedVal ? globalSchedule.find(s => (viewType === 'class' ? s.cls === selectedVal : s.teacher === selectedVal) && s.day === day && s.period === `s${i}`) : null;
-                    html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
+                    const ec = cellData ? null : emptyCell(viewType, selectedVal, day, `s${i}`);
+                    html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]${ec ? ec.cls : ''}" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
                     if (cellData) {
                         const bgClass = cellData.type === 'hdtn' ? 'bg-subject-hdtn' : 'bg-subject-normal';
                         const bottomText = viewType === 'class' ? `<i class="fa-solid fa-user-tie mr-1"></i>${esc(cellData.teacher)}` : `<i class="fa-solid fa-users mr-1"></i>Lớp ${esc(cellData.cls)}`;
-                        html += `<div id="${esc(cellData.id)}" class="draggable ${bgClass} rounded p-2 text-left h-full shadow-sm hover:shadow transition border border-transparent hover:border-blue-300" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)"><div class="font-bold text-gray-800 text-xs truncate" title="${esc(cellData.subject)}">${esc(cellData.subject)}</div><div class="text-[11px] text-gray-600 mt-1 truncate">${bottomText}</div></div>`;
-                    } else if (viewType === 'teacher' && selectedVal && $('show-free').checked) {
-                        html += `<div class="free-slot"><i class="fa-solid fa-check mr-1"></i>Trống</div>`;
+                        html += `<div id="${esc(cellData.id)}" class="draggable ${bgClass} rounded p-2 text-left h-full shadow-sm hover:shadow transition border border-transparent hover:border-blue-300" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)"><div class="font-bold text-gray-800 text-xs truncate" title="${esc(cellData.subject)}">${esc(cellData.subject)}</div><div class="text-[11px] text-gray-600 mt-1 truncate">${bottomText}</div><button type="button" class="unplace-btn" title="Gỡ tiết này về danh sách chưa xếp" onclick="event.stopPropagation(); unplaceLesson('${esc(cellData.id)}')"><i class="fa-solid fa-xmark"></i></button></div>`;
+                    } else if (ec) {
+                        html += ec.html;
                     }
                     html += `</td>`;
                 });
@@ -869,7 +896,12 @@
             ev.preventDefault();
             const zone = ev.target.closest('.drop-zone'); if (!zone) return;
             dragEnd();
-            const D = globalSchedule.find(s => s.id === ev.dataTransfer.getData("text")); if (!D) return;
+            const raw = ev.dataTransfer.getData("text");
+            if (raw.startsWith('pool:')) {
+                if (zone.querySelector('.draggable')) return showToast("Ô này đã có tiết. Hãy thả vào ô trống.", "error");
+                return placeEntry(parseInt(raw.slice(5)), zone.getAttribute('data-day'), zone.getAttribute('data-period'));
+            }
+            const D = globalSchedule.find(s => s.id === raw); if (!D) return;
             const td = zone.getAttribute('data-day'), tp = zone.getAttribute('data-period');
             if (D.day === td && D.period === tp) return;
 
@@ -880,6 +912,124 @@
             D.day = td; D.period = tp;
             if (r.E) { r.E.day = od; r.E.period = op; }
             saveDataToStorage(); renderTimetable(); setMode('manual'); showToast("Đã đổi tiết!", "success");
+        }
+
+        // --- XẾP THỦ CÔNG: DANH SÁCH TIẾT CHƯA XẾP + TIẾT TRỐNG GV THEO LỚP ---
+        const shortName = n => String(n).trim().split(/\s+/).slice(-2).join(' ');
+
+        function buildSlotIndex() {
+            tBusyIdx = new Map(); cBusyIdx = new Map();
+            globalSchedule.forEach(x => { tBusyIdx.set(`${x.teacher}|${x.day}|${x.period}`, x); cBusyIdx.set(`${x.cls}|${x.day}|${x.period}`, x); });
+        }
+        // Những tiết đã phân công nhưng chưa có trên lưới, lọc theo lớp/GV đang xem
+        function buildPool(viewType, val) {
+            const placed = new Map();
+            globalSchedule.forEach(x => { const k = `${x.teacher}|${x.subject}|${x.cls}`; placed.set(k, (placed.get(k) || 0) + 1); });
+            const agg = new Map();
+            dbTeachers.forEach(t => (t.teaching || []).forEach(tc => {
+                const n = parseInt(tc.prd) || 0; if (n <= 0) return;
+                const k = `${t.name}|${tc.sub}|${tc.cls}`;
+                if (!agg.has(k)) agg.set(k, { key: k, teacher: t.name, subject: tc.sub, cls: tc.cls, type: isHdtnSubject(tc.sub) ? 'hdtn' : 'normal', total: 0 });
+                agg.get(k).total += n;
+            }));
+            poolList = [];
+            agg.forEach(e => {
+                e.left = e.total - (placed.get(e.key) || 0);
+                if (e.left > 0 && val && (viewType === 'class' ? e.cls === val : e.teacher === val)) poolList.push(e);
+            });
+            const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+            poolList.sort((a, b) => collator.compare(a.subject, b.subject) || collator.compare(a.teacher, b.teacher) || collator.compare(a.cls, b.cls));
+            if (poolSel && !poolList.some(e => e.key === poolSel)) poolSel = null;
+        }
+        function placeConflict(e, d, p) {
+            const t = tBusyIdx.get(`${e.teacher}|${d}|${p}`), c = cBusyIdx.get(`${e.cls}|${d}|${p}`);
+            return t ? { kind: 'teacher', s: t } : c ? { kind: 'class', s: c } : null;
+        }
+        function busyCount(map, name) { let n = 0; DAYS.forEach(d => PERIODS.forEach(p => { if (map.has(`${name}|${d}|${p}`)) n++; })); return n; }
+
+        // Nội dung ô trống của bảng đang xem
+        function emptyCell(viewType, val, d, p) {
+            if (!val) return null;
+            const sel = poolSel ? poolList.find(e => e.key === poolSel) : null;
+            if (sel) {
+                const c = placeConflict(sel, d, p);
+                if (c) {
+                    const msg = c.kind === 'teacher' ? `GV bận: lớp ${c.s.cls}` : `Lớp bận: ${c.s.subject}`;
+                    const tip = c.kind === 'teacher' ? `${sel.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}` : `Lớp ${sel.cls} đang học ${c.s.subject} với ${c.s.teacher}`;
+                    return { cls: ' pool-bad', html: `<div class="slot-busy" title="${esc(tip)}">${esc(msg)}</div>` };
+                }
+                const label = viewType === 'class' ? shortName(sel.teacher) : `Lớp ${sel.cls}`;
+                return { cls: ' pool-ok', html: `<button type="button" class="place-btn" title="Xếp ${esc(sel.subject)} - ${esc(sel.teacher)} - lớp ${esc(sel.cls)} vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(sel)},'${d}','${p}')"><i class="fa-solid fa-plus mr-1"></i>${esc(label)}</button>` };
+            }
+            const showFree = $('show-free').checked;
+            if (viewType === 'class') {
+                if (!poolList.length) return null;
+                const free = poolList.filter(e => !tBusyIdx.has(`${e.teacher}|${d}|${p}`));
+                if (!free.length) return { cls: '', html: `<div class="slot-busy" title="Mọi GV còn tiết ở lớp này đều đang bận lúc này">GV bận hết</div>` };
+                const chips = free.slice(0, 3).map(e => `<button type="button" class="free-chip" title="${esc(e.subject)} - ${esc(e.teacher)}: bấm để xếp vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(e)},'${d}','${p}')">${esc(e.subject)}: ${esc(shortName(e.teacher))}</button>`).join('');
+                return { cls: '', html: chips + (free.length > 3 ? `<div class="text-[10px] text-gray-400 text-center">+${free.length - 3} GV nữa</div>` : '') };
+            }
+            // Xem theo GV: các lớp đang rảnh ở ô này
+            const classes = poolList.filter(e => !cBusyIdx.has(`${e.cls}|${d}|${p}`));
+            const chips = classes.slice(0, 3).map(e => `<button type="button" class="free-chip" title="${esc(e.subject)} - lớp ${esc(e.cls)}: bấm để xếp vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(e)},'${d}','${p}')">${esc(e.subject)}: lớp ${esc(e.cls)}</button>`).join('');
+            if (chips) return { cls: '', html: (showFree ? `<div class="text-[10px] text-green-600 font-semibold text-center mb-0.5">Trống</div>` : '') + chips };
+            if (showFree) return { cls: '', html: `<div class="free-slot"><i class="fa-solid fa-check mr-1"></i>Trống</div>` };
+            return null;
+        }
+
+        function renderPoolPanel() {
+            const el = $('pool-list'), head = $('pool-head'); if (!el) return;
+            const viewType = $('view-type').value, val = $('main-filter').value;
+            if (!val) { head.textContent = ''; el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa chọn lớp hoặc giáo viên.</div>`; return; }
+            const who = viewType === 'class' ? `Lớp ${val}` : `GV ${val}`;
+            const left = poolList.reduce((a, e) => a + e.left, 0);
+            head.innerHTML = left ? `${esc(who)}: còn <b class="text-amber-700">${left}</b> tiết chưa xếp.` : `${esc(who)}: đã xếp đủ tiết.`;
+            el.innerHTML = poolList.map((e, i) => {
+                let can = 0;
+                DAYS.forEach(d => PERIODS.forEach(p => { if (!placeConflict(e, d, p)) can++; }));
+                const freeOwn = viewType === 'class' ? SLOT_COUNT - busyCount(tBusyIdx, e.teacher) : SLOT_COUNT - busyCount(cBusyIdx, e.cls);
+                return `<div class="pool-item${e.key === poolSel ? ' pool-active' : ''}" draggable="true" onclick="selectPool(${i})" ondragstart="dragPool(event,${i})" ondragend="dragEnd()">
+                    <div class="flex justify-between gap-2 text-sm"><b class="truncate">${esc(e.subject)}</b><span class="shrink-0 text-xs font-bold text-amber-700">còn ${e.left}/${e.total}</span></div>
+                    <div class="text-[11px] text-gray-600 truncate">${viewType === 'class' ? 'GV: ' + esc(e.teacher) : 'Lớp ' + esc(e.cls)}</div>
+                    <div class="text-[11px] mt-0.5 ${can ? 'text-green-700' : 'text-red-600 font-semibold'}">${can ? `Xếp được vào ${can} ô` : 'Không còn ô nào phù hợp'}</div>
+                    <div class="text-[11px] text-gray-500">${viewType === 'class' ? 'GV' : 'Lớp'} trống ${freeOwn}/${SLOT_COUNT} tiết trong tuần</div>
+                </div>`;
+            }).join('');
+        }
+        function selectPool(i) {
+            const e = poolList[i]; if (!e) return;
+            poolSel = poolSel === e.key ? null : e.key;
+            if (poolSel) { setFreeTeacher(e.teacher); setMode('manual'); }
+            renderTimetable();
+        }
+        function dragPool(ev, i) {
+            const e = poolList[i]; if (!e) return;
+            ev.dataTransfer.setData('text', 'pool:' + i); ev.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => {
+                buildSlotIndex();
+                document.querySelectorAll('#tkb-body .drop-zone').forEach(z => {
+                    z.classList.remove('slot-ok', 'slot-swap', 'slot-bad');
+                    if (z.querySelector('.draggable')) return;
+                    z.classList.add(placeConflict(e, z.getAttribute('data-day'), z.getAttribute('data-period')) ? 'slot-bad' : 'slot-ok');
+                });
+                $('drag-legend').classList.remove('view-hidden'); $('drag-legend').classList.add('flex');
+                setFreeTeacher(e.teacher);
+            }, 0);
+        }
+        function placeEntry(i, d, p) {
+            const e = poolList[i]; if (!e) return;
+            buildSlotIndex();
+            const c = placeConflict(e, d, p);
+            if (c) return showToast(c.kind === 'teacher' ? `Lỗi: GV ${e.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}.` : `Lỗi: Lớp ${e.cls} đang học ${c.s.subject} với ${c.s.teacher}.`, "error");
+            globalSchedule.push({ id: newCellId(), day: d, period: p, teacher: e.teacher, subject: e.subject, cls: e.cls, type: e.type });
+            saveDataToStorage(); setMode('manual'); renderDataSummary(); renderTimetable();
+            showToast(`Đã xếp ${e.subject} (${e.teacher}) vào ${slotLabel(d, p)}.`, "success");
+        }
+        function unplaceLesson(id) {
+            const x = globalSchedule.find(s => s.id === id); if (!x) return;
+            globalSchedule = globalSchedule.filter(s => s.id !== id);
+            saveDataToStorage(); setMode('manual'); renderDataSummary(); renderTimetable();
+            showToast(`Đã gỡ ${x.subject} lớp ${x.cls} về danh sách chưa xếp.`, "success");
         }
 
         // --- TIẾT TRỐNG CỦA GIÁO VIÊN ---
@@ -901,6 +1051,7 @@
         }
         function onFreeTeacherChange() { freeTeacher = $('free-teacher').value; renderFreePanel(); }
         function onMainFilterChange() {
+            poolSel = null;
             if ($('view-type').value === 'teacher' && $('main-filter').value) freeTeacher = $('main-filter').value;
             renderTimetable();
         }
