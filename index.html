@@ -735,6 +735,19 @@
                 const d = (s / nP) | 0;
                 let c = W_CLASH * tOcc[lt[i] * nS + s] + W_SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + W_TDAY * tDay[lt[i] * nD + d] + adj(i, s);
                 if (dayOff[lt[i]] === d) c += W_OFF;
+                
+                // BỔ SUNG QUY TẮC: Phạt nặng nếu GV trống quá 1 tiết
+                tOcc[lt[i] * nS + s]++; // Thử đặt tiết vào
+                let lastP = -1, gapCost = 0;
+                for(let p = 0; p < nP; p++) {
+                    if(tOcc[lt[i] * nS + d * nP + p] > 0) {
+                        if(lastP >= 0 && p - lastP - 1 > 1) gapCost += 80; // Phạt cực nặng lỗi trống > 1 tiết
+                        lastP = p;
+                    }
+                }
+                tOcc[lt[i] * nS + s]--; // Rút tiết ra trả lại trạng thái cũ
+                c += gapCost;
+
                 return c;
             };
             const softOf = (i) => {
@@ -839,6 +852,16 @@
                 for (let i = 0; i < idx; i++) if (!cSlot.has(key(L.cls, d, PERIODS[i]))) holes++;
                 let sc = Math.random() * 2 + 3 * (classDay.get(`${L.cls}|${d}`) || 0) + 2 * (teacherDay.get(`${L.teacher}|${d}`) || 0) + 40 * (subjDay.get(`${L.cls}|${L.subject}|${d}`) || 0) + 4 * holes + 0.3 * idx;
                 if (opts.noConsec && adjacentSame(L, d, p)) sc += 1000;
+                
+                // BỔ SUNG QUY TẮC: Kiểm tra khoảng trống của giáo viên
+                let tSlots = [];
+                for (let i = 0; i < PERIODS.length; i++) {
+                    if (i === idx || tSlot.has(key(L.teacher, d, PERIODS[i]))) tSlots.push(i);
+                }
+                for (let k = 1; k < tSlots.length; k++) {
+                    if (tSlots[k] - tSlots[k-1] - 1 > 1) sc += 1000; // Phạt điểm tối đa
+                }
+                
                 return sc;
             };
 
@@ -955,7 +978,7 @@
             el.className = `mt-4 text-xs rounded-lg border p-3 leading-relaxed ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`;
             let html = `<div class="font-bold text-sm mb-1">Đã xếp ${r.placed}/${r.total} tiết</div>`;
             if (r.consec > 0) html += `<div class="mb-1">Còn ${r.consec} cặp tiết liền nhau cùng môn.</div>`;
-            if (r.missing.length) html += `<div class="font-semibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
+            if (r.missing.length) html += `<div class="fontsemibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.warnings.length) html += `<div class="font-semibold">Dữ liệu cần kiểm tra:</div><ul class="list-disc pl-4">${r.warnings.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.pack && r.missing.length) html += `<div class="mt-1">Mẹo: GV có quá nhiều tiết trùng khung buổi của các lớp. Hãy giảm tiết dồn vào 1 khối, hoặc bỏ chọn "Gói gọn buổi học" rồi xếp lại.</div>`;
             if (ok) html += `<div>Không có xung đột GV hoặc lớp.</div>`;
@@ -965,15 +988,38 @@
         // Kiểm tra quy tắc buổi học trên TKB hiện có (dùng cho cả xếp tự động lẫn thủ công)
         function checkSessionRules() {
             const has = new Set(globalSchedule.map(x => `${x.cls}|${x.day}|${x.period}`));
+            const hasT = new Set(globalSchedule.map(x => `${x.teacher}|${x.day}|${x.period}`));
             const classes = listEntities('class'), stat = new Map(), issues = [];
+            
+            // 1. Kiểm tra lớp
             classes.forEach(c => DAYS.forEach(d => {
                 const used = PERIODS.map(p => has.has(`${c}|${d}|${p}`));
                 const n = used.filter(Boolean).length, last = used.lastIndexOf(true), holes = [], problems = [];
                 for (let k = 0; k < last; k++) if (!used[k]) holes.push(k);
-                if (holes.length) { const t = `trống tiết ${holes.map(k => k + 1).join(', ')} giữa buổi`; problems.push(t); issues.push({ cls: c, text: `Lớp ${c} - Thứ ${d.slice(1)}: ${t}.` }); }
-                if (n > 0 && n < MIN_PERIODS) { const t = `chỉ có ${n} tiết (tối thiểu ${MIN_PERIODS})`; problems.push(t); issues.push({ cls: c, text: `Lớp ${c} - Thứ ${d.slice(1)}: ${t}.` }); }
+                if (holes.length) { const t = `trống tiết ${holes.map(k => k + 1).join(', ')} giữa buổi`; problems.push(t); issues.push({ id: c, type: 'class', text: `Lớp ${c} - Thứ ${d.slice(1)}: ${t}.` }); }
+                if (n > 0 && n < MIN_PERIODS) { const t = `chỉ có ${n} tiết (tối thiểu ${MIN_PERIODS})`; problems.push(t); issues.push({ id: c, type: 'class', text: `Lớp ${c} - Thứ ${d.slice(1)}: ${t}.` }); }
                 stat.set(`${c}|${d}`, { n, holes, problems });
             }));
+            
+            // 2. BỔ SUNG: Kiểm tra khoảng trống của giáo viên
+            const teachers = listEntities('teacher');
+            teachers.forEach(t => DAYS.forEach(d => {
+                const used = PERIODS.map(p => hasT.has(`${t}|${d}|${p}`));
+                let lastIdx = -1;
+                for (let i = 0; i < used.length; i++) {
+                    if (used[i]) {
+                        if (lastIdx >= 0) {
+                            const gap = i - lastIdx - 1;
+                            if (gap > 1) {
+                                issues.push({ id: t, type: 'teacher', text: `GV ${t} - Thứ ${d.slice(1)}: trống ${gap} tiết liên tiếp giữa buổi.` });
+                            }
+                        }
+                        lastIdx = i;
+                    }
+                }
+            }));
+            
+            // 3. Kiểm tra chênh lệch số tiết khối
             const byGrade = new Map();
             classes.forEach(c => { const g = gradeOf(c); if (!byGrade.has(g)) byGrade.set(g, []); byGrade.get(g).push(c); });
             byGrade.forEach((list, g) => {
@@ -983,7 +1029,7 @@
                     if (new Set(counts).size < 2) return;
                     const t = `các lớp khối ${g} khác số tiết (${list.slice(0, 6).map((c, i) => `${c}: ${counts[i]}`).join(', ')}${list.length > 6 ? '...' : ''})`;
                     list.forEach(c => stat.get(`${c}|${d}`).problems.push(t));
-                    issues.push({ cls: list[counts.indexOf(Math.min(...counts))], text: `Thứ ${d.slice(1)}: ${t}.` });
+                    issues.push({ id: list[counts.indexOf(Math.min(...counts))], type: 'class', text: `Thứ ${d.slice(1)}: ${t}.` });
                 });
             });
             return { issues, stat };
@@ -993,18 +1039,22 @@
             const el = $('session-body'); if (!el) return;
             if (!sess) { el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có TKB để kiểm tra.</div>`; return; }
             if (!sess.issues.length) {
-                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt: tiết xếp liền từ tiết 1, mỗi buổi tối thiểu ${MIN_PERIODS} tiết, các lớp cùng khối có cùng số tiết mỗi buổi.</div>`;
+                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt mọi quy tắc: lớp xếp liền tiết từ tiết 1, đủ tiết; giáo viên không bị trống > 1 tiết.</div>`;
                 return;
             }
             const shown = sess.issues.slice(0, 40);
             el.innerHTML = `<div class="text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-2 leading-relaxed">
-                <div class="font-bold mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Có ${sess.issues.length} chỗ chưa đạt (bấm để xem lớp)</div>
-                <ul class="list-disc pl-4 max-h-44 overflow-y-auto">${shown.map(i => `<li><button type="button" class="text-left hover:underline" data-cls="${esc(i.cls)}" onclick="gotoClass(this.dataset.cls)">${esc(i.text)}</button></li>`).join('')}${sess.issues.length > shown.length ? `<li>... và ${sess.issues.length - shown.length} chỗ nữa</li>` : ''}</ul>
+                <div class="font-bold mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Có ${sess.issues.length} chỗ chưa đạt (bấm để xem)</div>
+                <ul class="list-disc pl-4 max-h-44 overflow-y-auto">${shown.map(i => `<li><button type="button" class="text-left hover:underline" data-id="${esc(i.id)}" data-type="${esc(i.type)}" onclick="gotoEntity(this.dataset.id, this.dataset.type)">${esc(i.text)}</button></li>`).join('')}${sess.issues.length > shown.length ? `<li>... và ${sess.issues.length - shown.length} chỗ nữa</li>` : ''}</ul>
             </div>`;
         }
-        function gotoClass(c) {
-            $('view-type').value = 'class'; updateFilterDropdown();
-            $('main-filter').value = c; poolSel = null; renderTimetable();
+
+        function gotoEntity(id, type) {
+            $('view-type').value = type; 
+            updateFilterDropdown();
+            $('main-filter').value = id; 
+            poolSel = null; 
+            renderTimetable();
         }
 
         function clearTimetable() {
