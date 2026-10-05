@@ -655,10 +655,8 @@
             return list;
         }
 
-        // Khối của lớp: lấy số đứng đầu tên lớp (10A1 -> 10)
         function gradeOf(cls) { const m = String(cls).trim().match(/^\d+/); return m ? m[0] : String(cls).trim(); }
 
-        // Chia số tiết/tuần của lớp thành các buổi 4-5 tiết, mỗi buổi xếp liền từ tiết 1
         function gradePattern(total) {
             const nd = DAYS.length, maxP = PERIODS.length;
             if (total >= nd * maxP) return { counts: DAYS.map(() => maxP), ok: true, days: nd };
@@ -671,7 +669,6 @@
             return { counts, ok, days: k };
         }
 
-        // Mỗi khối dùng chung 1 khung số tiết theo ngày; trả về các ô được phép của từng lớp
         function buildGradePlans(clsCount) {
             const groups = new Map(), clsSlots = new Map(), plans = [], warnings = [];
             clsCount.forEach((n, c) => { const g = gradeOf(c); if (!groups.has(g)) groups.set(g, []); groups.get(g).push([c, n]); });
@@ -701,7 +698,6 @@
             return { warnings, clsCount: cls, tchCount: tch, plan };
         }
 
-        // Xếp theo khung buổi học: mỗi lớp lấp đầy các ô liền từ tiết 1, chỉ cần hoán đổi tiết trong lớp để hết trùng GV
         function attemptPacked(baseLessons, opts, info) {
             const nD = DAYS.length, nP = PERIODS.length, nS = nD * nP;
             const W_CLASH = 1000, W_OFF = 8, W_SUBJ = 6, W_CONSEC = 30, W_TDAY = 1;
@@ -736,16 +732,20 @@
                 let c = W_CLASH * tOcc[lt[i] * nS + s] + W_SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + W_TDAY * tDay[lt[i] * nD + d] + adj(i, s);
                 if (dayOff[lt[i]] === d) c += W_OFF;
                 
-                // BỔ SUNG QUY TẮC: Phạt nặng nếu GV trống quá 1 tiết
-                tOcc[lt[i] * nS + s]++; // Thử đặt tiết vào
+                // QUY TẮC MỚI: Hạn chế tối đa GV trống tiết, tối đa chỉ được trống 1 tiết (gap = 1), cấm tuyệt đối gap > 1
+                tOcc[lt[i] * nS + s]++;
                 let lastP = -1, gapCost = 0;
                 for(let p = 0; p < nP; p++) {
                     if(tOcc[lt[i] * nS + d * nP + p] > 0) {
-                        if(lastP >= 0 && p - lastP - 1 > 1) gapCost += 80; // Phạt cực nặng lỗi trống > 1 tiết
+                        if(lastP >= 0) {
+                            let gap = p - lastP - 1;
+                            if(gap === 1) gapCost += 40; // Hạn chế trống 1 tiết
+                            else if(gap > 1) gapCost += 2000; // Cấm tuyệt đối trống > 1 tiết
+                        }
                         lastP = p;
                     }
                 }
-                tOcc[lt[i] * nS + s]--; // Rút tiết ra trả lại trạng thái cũ
+                tOcc[lt[i] * nS + s]--;
                 c += gapCost;
 
                 return c;
@@ -764,7 +764,6 @@
             };
             const applySwap = (a, b) => { const sa = slotOf[a], sb = slotOf[b]; del(a); del(b); add(a, sb); add(b, sa); };
 
-            // 1) Xếp tham lam vào các ô được phép của lớp
             const load = lessons.map((l, i) => (info.tchCount.get(l.teacher) || 0) + (info.clsCount.get(l.cls) || 0));
             const order = shuffle(lessons.map((_, i) => i)).sort((a, b) => load[b] - load[a]);
             for (const i of order) {
@@ -779,7 +778,6 @@
             const placed = []; for (let i = 0; i < nL; i++) if (slotOf[i] >= 0) placed.push(i);
             const byCls = Array.from({ length: nC }, () => []); placed.forEach(i => byCls[lc[i]].push(i));
 
-            // 2) Hoán đổi tiết trong cùng lớp cho đến khi hết trùng giáo viên
             const t0 = performance.now(), MAX_ITER = 3000 + nL * 8;
             for (let iter = 0; iter < MAX_ITER && performance.now() - t0 < 500; iter++) {
                 const conf = []; for (const i of placed) if (tOcc[lt[i] * nS + slotOf[i]] > 1) conf.push(i);
@@ -792,7 +790,6 @@
                 else if (Math.random() < 0.3) { let b = mates[(Math.random() * mates.length) | 0]; if (b !== a) applySwap(a, b); }
             }
 
-            // 3) Tối ưu mềm (nghỉ 1 ngày, tránh liền 2 tiết cùng môn, tránh 1 môn nhiều lần/ngày); không bao giờ gây trùng mới
             const t1 = performance.now();
             for (let k = 0; k < nL * 6 && performance.now() - t1 < 200; k++) {
                 const a = placed[(Math.random() * placed.length) | 0];
@@ -802,7 +799,6 @@
                 if (bestB >= 0) applySwap(a, bestB);
             }
 
-            // 4) Còn trùng GV thì gỡ tiết thừa ra để lưới luôn hợp lệ
             const seen = new Set();
             for (const i of placed) { const key = lt[i] * nS + slotOf[i]; if (seen.has(key)) del(i); else seen.add(key); }
 
@@ -853,15 +849,16 @@
                 let sc = Math.random() * 2 + 3 * (classDay.get(`${L.cls}|${d}`) || 0) + 2 * (teacherDay.get(`${L.teacher}|${d}`) || 0) + 40 * (subjDay.get(`${L.cls}|${L.subject}|${d}`) || 0) + 4 * holes + 0.3 * idx;
                 if (opts.noConsec && adjacentSame(L, d, p)) sc += 1000;
                 
-                // BỔ SUNG QUY TẮC: Kiểm tra khoảng trống của giáo viên
+                // Quy tắc khoảng trống GV: tối đa trống 1 tiết, phạt nặng nếu trống > 1 tiết
                 let tSlots = [];
                 for (let i = 0; i < PERIODS.length; i++) {
                     if (i === idx || tSlot.has(key(L.teacher, d, PERIODS[i]))) tSlots.push(i);
                 }
                 for (let k = 1; k < tSlots.length; k++) {
-                    if (tSlots[k] - tSlots[k-1] - 1 > 1) sc += 1000; // Phạt điểm tối đa
+                    let gap = tSlots[k] - tSlots[k-1] - 1;
+                    if (gap === 1) sc += 50;
+                    else if (gap > 1) sc += 3000;
                 }
-                
                 return sc;
             };
 
@@ -978,20 +975,19 @@
             el.className = `mt-4 text-xs rounded-lg border p-3 leading-relaxed ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`;
             let html = `<div class="font-bold text-sm mb-1">Đã xếp ${r.placed}/${r.total} tiết</div>`;
             if (r.consec > 0) html += `<div class="mb-1">Còn ${r.consec} cặp tiết liền nhau cùng môn.</div>`;
-            if (r.missing.length) html += `<div class="fontsemibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
+            if (r.missing.length) html += `<div class="font-semibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.warnings.length) html += `<div class="font-semibold">Dữ liệu cần kiểm tra:</div><ul class="list-disc pl-4">${r.warnings.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.pack && r.missing.length) html += `<div class="mt-1">Mẹo: GV có quá nhiều tiết trùng khung buổi của các lớp. Hãy giảm tiết dồn vào 1 khối, hoặc bỏ chọn "Gói gọn buổi học" rồi xếp lại.</div>`;
             if (ok) html += `<div>Không có xung đột GV hoặc lớp.</div>`;
             el.innerHTML = html;
         }
 
-        // Kiểm tra quy tắc buổi học trên TKB hiện có (dùng cho cả xếp tự động lẫn thủ công)
         function checkSessionRules() {
             const has = new Set(globalSchedule.map(x => `${x.cls}|${x.day}|${x.period}`));
             const hasT = new Set(globalSchedule.map(x => `${x.teacher}|${x.day}|${x.period}`));
             const classes = listEntities('class'), stat = new Map(), issues = [];
             
-            // 1. Kiểm tra lớp
+            // 1. Kiểm tra lớp học
             classes.forEach(c => DAYS.forEach(d => {
                 const used = PERIODS.map(p => has.has(`${c}|${d}|${p}`));
                 const n = used.filter(Boolean).length, last = used.lastIndexOf(true), holes = [], problems = [];
@@ -1001,7 +997,7 @@
                 stat.set(`${c}|${d}`, { n, holes, problems });
             }));
             
-            // 2. BỔ SUNG: Kiểm tra khoảng trống của giáo viên
+            // 2. Kiểm tra khoảng trống của giáo viên (tối đa trống 1 tiết)
             const teachers = listEntities('teacher');
             teachers.forEach(t => DAYS.forEach(d => {
                 const used = PERIODS.map(p => hasT.has(`${t}|${d}|${p}`));
@@ -1011,7 +1007,7 @@
                         if (lastIdx >= 0) {
                             const gap = i - lastIdx - 1;
                             if (gap > 1) {
-                                issues.push({ id: t, type: 'teacher', text: `GV ${t} - Thứ ${d.slice(1)}: trống ${gap} tiết liên tiếp giữa buổi.` });
+                                issues.push({ id: t, type: 'teacher', text: `GV ${t} - Thứ ${d.slice(1)}: trống ${gap} tiết liên tiếp giữa buổi (vi phạm quy tắc tối đa trống 1 tiết).` });
                             }
                         }
                         lastIdx = i;
@@ -1039,7 +1035,7 @@
             const el = $('session-body'); if (!el) return;
             if (!sess) { el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có TKB để kiểm tra.</div>`; return; }
             if (!sess.issues.length) {
-                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt mọi quy tắc: lớp xếp liền tiết từ tiết 1, đủ tiết; giáo viên không bị trống > 1 tiết.</div>`;
+                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt mọi quy tắc: Lớp học liền tiết từ tiết 1; giáo viên trống tối đa 1 tiết giữa buổi.</div>`;
                 return;
             }
             const shown = sess.issues.slice(0, 40);
@@ -1048,13 +1044,9 @@
                 <ul class="list-disc pl-4 max-h-44 overflow-y-auto">${shown.map(i => `<li><button type="button" class="text-left hover:underline" data-id="${esc(i.id)}" data-type="${esc(i.type)}" onclick="gotoEntity(this.dataset.id, this.dataset.type)">${esc(i.text)}</button></li>`).join('')}${sess.issues.length > shown.length ? `<li>... và ${sess.issues.length - shown.length} chỗ nữa</li>` : ''}</ul>
             </div>`;
         }
-
         function gotoEntity(id, type) {
-            $('view-type').value = type; 
-            updateFilterDropdown();
-            $('main-filter').value = id; 
-            poolSel = null; 
-            renderTimetable();
+            $('view-type').value = type; updateFilterDropdown();
+            $('main-filter').value = id; poolSel = null; renderTimetable();
         }
 
         function clearTimetable() {
@@ -1123,7 +1115,6 @@
         function allowDrop(ev) { ev.preventDefault(); const z = ev.target.closest('.drop-zone'); if (z) z.classList.add('drag-over'); }
         function dragLeave(ev) { const z = ev.target.closest('.drop-zone'); if (z && !z.contains(ev.relatedTarget)) z.classList.remove('drag-over'); }
 
-        // Kiểm tra một lần chuyển/đổi tiết có hợp lệ không (dùng chung cho gợi ý khi kéo và khi thả)
         function evaluateMove(D, td, tp) {
             const viewType = $('view-type').value, sel = $('main-filter').value;
             const inView = s => viewType === 'class' ? s.cls === sel : s.teacher === sel;
@@ -1184,14 +1175,12 @@
             saveDataToStorage(); renderTimetable(); setMode('manual'); showToast("Đã đổi tiết!", "success");
         }
 
-        // --- XẾP THỦ CÔNG: DANH SÁCH TIẾT CHƯA XẾP + TIẾT TRỐNG GV THEO LỚP ---
         const shortName = n => String(n).trim().split(/\s+/).slice(-2).join(' ');
 
         function buildSlotIndex() {
             tBusyIdx = new Map(); cBusyIdx = new Map();
             globalSchedule.forEach(x => { tBusyIdx.set(`${x.teacher}|${x.day}|${x.period}`, x); cBusyIdx.set(`${x.cls}|${x.day}|${x.period}`, x); });
         }
-        // Những tiết đã phân công nhưng chưa có trên lưới, lọc theo lớp/GV đang xem
         function buildPool(viewType, val) {
             const placed = new Map();
             globalSchedule.forEach(x => { const k = `${x.teacher}|${x.subject}|${x.cls}`; placed.set(k, (placed.get(k) || 0) + 1); });
@@ -1217,7 +1206,6 @@
         }
         function busyCount(map, name) { let n = 0; DAYS.forEach(d => PERIODS.forEach(p => { if (map.has(`${name}|${d}|${p}`)) n++; })); return n; }
 
-        // Nội dung ô trống của bảng đang xem
         function emptyCell(viewType, val, d, p) {
             if (!val) return null;
             const sel = poolSel ? poolList.find(e => e.key === poolSel) : null;
@@ -1239,7 +1227,6 @@
                 const chips = free.slice(0, 3).map(e => `<button type="button" class="free-chip" title="${esc(e.subject)} - ${esc(e.teacher)}: bấm để xếp vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(e)},'${d}','${p}')">${esc(e.subject)}: ${esc(shortName(e.teacher))}</button>`).join('');
                 return { cls: '', html: chips + (free.length > 3 ? `<div class="text-[10px] text-gray-400 text-center">+${free.length - 3} GV nữa</div>` : '') };
             }
-            // Xem theo GV: các lớp đang rảnh ở ô này
             const classes = poolList.filter(e => !cBusyIdx.has(`${e.cls}|${d}|${p}`));
             const chips = classes.slice(0, 3).map(e => `<button type="button" class="free-chip" title="${esc(e.subject)} - lớp ${esc(e.cls)}: bấm để xếp vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(e)},'${d}','${p}')">${esc(e.subject)}: lớp ${esc(e.cls)}</button>`).join('');
             if (chips) return { cls: '', html: (showFree ? `<div class="text-[10px] text-green-600 font-semibold text-center mb-0.5">Trống</div>` : '') + chips };
@@ -1302,10 +1289,8 @@
             showToast(`Đã gỡ ${x.subject} lớp ${x.cls} về danh sách chưa xếp.`, "success");
         }
 
-        // --- TIẾT TRỐNG CỦA GIÁO VIÊN ---
         const SLOT_COUNT = DAYS.length * PERIODS.length;
 
-        // Map: tên GV -> Map("t2|s1" -> tiết đang dạy)
         function teacherBusyMap() {
             const m = new Map();
             globalSchedule.forEach(s => {
@@ -1363,7 +1348,6 @@
             $('free-mini-grid').innerHTML = html;
         }
 
-        // --- BẢNG TIẾT TRỐNG TOÀN BỘ GV ---
         function openFreeModal() {
             const depts = Array.from(new Set(dbTeachers.filter(t => (t.teaching || []).length).map(t => t.dept || 'Chưa có tổ')));
             const cur = $('free-dept-filter').value;
@@ -1429,7 +1413,6 @@
         }
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('free-modal').classList.contains('view-hidden')) closeFreeModal(); });
 
-        // --- XUẤT FILE OFFICE ---
         const DAY_NAMES = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
         const MIME_TYPES = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
         const FILL = { normal: 'E0F2FE', hdtn: 'FEF08A', head: 'DBEAFE', label: 'F3F4F6' };
@@ -1710,28 +1693,21 @@
             showToast("Đã bốc 4 Giáo viên Test vào CSDL!", "success");
         }
 
-        // --- HỆ THỐNG KIỂM TRA DÙNG THỬ ---
         const MAX_TRIAL = 10;
         const ACTIVATION_KEY = "tienhuong28011981@";
 
         function checkTrialStatus() {
-            // Kiểm tra xem đã kích hoạt vĩnh viễn chưa
             const isActivated = localStorage.getItem('tkb_is_activated') === 'true';
             if (isActivated) return true; 
 
-            // Lấy số lần đã dùng, nếu chưa có thì gán là 0
             let trialCount = parseInt(localStorage.getItem('tkb_trial_count')) || 0;
-
-            // Mỗi lần truy cập hoặc tải lại trang sẽ cộng thêm 1
             trialCount++;
             localStorage.setItem('tkb_trial_count', trialCount);
 
             if (trialCount > MAX_TRIAL) {
-                // Hiển thị màn hình khóa
                 $('trial-lock-screen').classList.remove('hidden');
                 return false;
             } else {
-                // Báo số lần dùng thử còn lại (Delay 1 tí để UI kịp load)
                 setTimeout(() => {
                     showToast(`Bản dùng thử. Lần truy cập thứ ${trialCount}/${MAX_TRIAL}.`, "error");
                 }, 1000);
@@ -1742,12 +1718,9 @@
         function checkActivation() {
             const input = $('activation_code').value;
             if (input === ACTIVATION_KEY) {
-                // Lưu trạng thái kích hoạt vĩnh viễn
                 localStorage.setItem('tkb_is_activated', 'true');
                 $('trial-lock-screen').classList.add('hidden');
                 showToast("Kích hoạt bản quyền thành công!", "success");
-                
-                // Khởi chạy phần mềm sau khi mở khóa
                 initApp();
             } else {
                 showToast("Mật khẩu không chính xác!", "error");
@@ -1756,7 +1729,6 @@
             }
         }
 
-        // --- KHỞI CHẠY ỨNG DỤNG ---
         function initApp() {
             loadDataFromStorage();
             ensureSubjectDatalist();
@@ -1768,7 +1740,6 @@
         }
 
         window.onload = () => {
-            // Chỉ nạp dữ liệu và hiện UI nếu còn số lần dùng thử hoặc đã kích hoạt
             if (checkTrialStatus()) {
                 initApp();
             }
