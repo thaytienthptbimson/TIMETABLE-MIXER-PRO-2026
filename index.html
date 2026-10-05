@@ -6,80 +6,161 @@
     <title>TKB PRO - Phần mềm Xếp Thời Khóa Biểu THPT</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <script>
-        tailwind.config = { theme: { extend: { colors: { primary: '#1e3a8a', secondary: '#f3f4f6' } } } }
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Be Vietnam Pro"', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'] },
+                    borderRadius: { DEFAULT: '0.5rem', md: '0.625rem', lg: '0.75rem', xl: '1rem', '2xl': '1.25rem' },
+                    boxShadow: {
+                        sm: '0 1px 2px 0 rgba(37,45,110,.06), 0 1px 3px 0 rgba(37,45,110,.05)',
+                        DEFAULT: '0 2px 6px -1px rgba(37,45,110,.09), 0 2px 4px -2px rgba(37,45,110,.06)',
+                        md: '0 6px 14px -3px rgba(37,45,110,.11), 0 3px 6px -4px rgba(37,45,110,.08)',
+                        lg: '0 12px 28px -6px rgba(37,45,110,.17), 0 4px 10px -6px rgba(37,45,110,.10)',
+                        xl: '0 20px 40px -10px rgba(37,45,110,.22), 0 8px 16px -8px rgba(37,45,110,.12)',
+                        '2xl': '0 28px 60px -12px rgba(37,45,110,.30)'
+                    },
+                    colors: {
+                        primary: '#2f3490',
+                        secondary: '#f3f5fb',
+                        // Xanh chàm dịu (màu chủ đạo)
+                        blue: { 50: '#f2f5ff', 100: '#e4eaff', 200: '#ced9ff', 300: '#aebfff', 400: '#8796fb', 500: '#6573f1', 600: '#4f55e0', 700: '#4045c2', 800: '#353a9e', 900: '#2e3380', 950: '#1c1f4d' },
+                        // Xám pha xanh nhẹ, dịu mắt
+                        gray: { 50: '#f8f9fd', 100: '#f0f2f9', 200: '#e3e7f1', 300: '#cfd5e4', 400: '#9aa3bb', 500: '#697291', 600: '#505974', 700: '#3d445d', 800: '#2a3046', 900: '#1a1f33', 950: '#0f1220' },
+                        // Xanh bạc hà: ô trống, thành công
+                        green: { 50: '#eefcf6', 100: '#d5f6e7', 200: '#aeebd1', 300: '#78dab5', 400: '#3fc593', 500: '#1dab78', 600: '#12905f', 700: '#0f734e', 800: '#105b3f', 900: '#0e4a34', 950: '#062b1e' },
+                        // Vàng mật ong: HĐTN, cảnh báo
+                        yellow: { 50: '#fffaeb', 100: '#fff1c7', 200: '#ffe28f', 300: '#ffcf55', 400: '#fbba24', 500: '#f2a00c', 600: '#d58208', 700: '#ab6109', 800: '#8a4c0d', 900: '#723f0e', 950: '#412005' },
+                        amber: { 50: '#fffaeb', 100: '#fff1c7', 200: '#ffe28f', 300: '#ffcf55', 400: '#fbba24', 500: '#f2a00c', 600: '#d58208', 700: '#ab6109', 800: '#8a4c0d', 900: '#723f0e', 950: '#412005' },
+                        // Hồng san hô: lỗi, trùng lịch
+                        red: { 50: '#fff1f3', 100: '#ffe2e7', 200: '#ffc9d3', 300: '#ffa0b2', 400: '#fb7089', 500: '#f04a6b', 600: '#d92e55', 700: '#b72149', 800: '#951f42', 900: '#7e1f3d', 950: '#450b1f' },
+                        purple: { 50: '#f5f3ff', 100: '#ede9fe', 200: '#ddd6fe', 300: '#c4b5fd', 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9', 800: '#5b21b6', 900: '#4c1d95', 950: '#2e1065' }
+                    }
+                }
+            }
+        }
     </script>
     <style>
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .tkb-table th { position: sticky; top: 0; z-index: 20; background-color: #f8fafc; }
-        .tkb-table .sticky-col { position: sticky; left: 0; z-index: 10; background-color: #f8fafc; }
+        :root {
+            --line: #e3e7f1; --ink: #2a3046;
+            --brand: #4f55e0; --brand-300: #aebfff; --brand-soft: #e4eaff;
+            --ok: #1dab78; --ok-line: #78dab5; --ok-soft: #d5f6e7; --ok-faint: #f1fcf7; --ok-ink: #0f734e;
+            --bad: #f04a6b; --bad-soft: #ffe2e7; --bad-ink: #b72149;
+            --swap: #8b5cf6; --swap-soft: #ede9fe;
+        }
+        body {
+            background-color: #f3f5fb;
+            background-image: radial-gradient(900px 480px at 10% -8%, #e8ebff 0%, rgba(232,235,255,0) 70%), radial-gradient(800px 440px at 100% 108%, #e3f6ee 0%, rgba(227,246,238,0) 70%);
+            background-attachment: fixed;
+            -webkit-font-smoothing: antialiased;
+        }
+        input[type="checkbox"], input[type="radio"] { accent-color: #4f55e0; }
+        input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus { outline: none; border-color: #6573f1; box-shadow: 0 0 0 3px rgba(101,115,241,.22); }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cfd5e4; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+        ::-webkit-scrollbar-thumb:hover { background: #9aa3bb; background-clip: padding-box; border: 2px solid transparent; }
+
+        /* Thanh bên */
+        .app-sidebar { background: linear-gradient(185deg, #3b40b4 0%, #2f3490 48%, #262a6c 100%); position: relative; overflow: hidden; }
+        .app-sidebar::before { content: ''; position: absolute; width: 280px; height: 280px; right: -130px; top: -100px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.16), rgba(255,255,255,0) 66%); pointer-events: none; }
+        .app-sidebar::after { content: ''; position: absolute; width: 240px; height: 240px; left: -120px; bottom: -90px; border-radius: 50%; background: radial-gradient(circle, rgba(255,207,85,.14), rgba(255,207,85,0) 66%); pointer-events: none; }
+        .app-sidebar > * { position: relative; z-index: 1; }
+        .menu-item { color: rgba(255,255,255,.78); }
+        .menu-item i { color: rgba(255,255,255,.66); }
+        .menu-item:hover { background: rgba(255,255,255,.10); color: #fff; }
+        .menu-item.menu-active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #ffcf55; }
+        .menu-item.menu-active i { color: #ffcf55; }
+
+        /* Nút hành động chính */
+        .btn-cta { background: linear-gradient(135deg, #4f55e0 0%, #7a5af8 100%); color: #fff; box-shadow: 0 8px 18px -6px rgba(79,85,224,.55); transition: filter .15s, transform .15s, box-shadow .15s; }
+        .btn-cta:hover { filter: brightness(1.07); box-shadow: 0 10px 22px -6px rgba(79,85,224,.62); }
+        .btn-cta:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+
+        /* Bảng TKB */
+        .tkb-table th { position: sticky; top: 0; z-index: 20; background-color: #f6f7fd; }
+        .tkb-table .sticky-col { position: sticky; left: 0; z-index: 10; background-color: #f6f7fd; }
         .tkb-table th.sticky-col { z-index: 30; }
-        .bg-subject-normal { background-color: #e0f2fe; border-left: 4px solid #38bdf8; } 
-        .bg-subject-hdtn { background-color: #fef08a; border-left: 4px solid #eab308; } 
-        .draggable { cursor: grab; transition: all 0.2s ease; }
-        .draggable:active { cursor: grabbing; opacity: 0.7; transform: scale(0.95); }
-        .drop-zone { transition: background-color 0.2s; }
-        .drop-zone.drag-over { background-color: #dcfce3 !important; border: 2px dashed #22c55e; }
+        .bg-subject-normal { background: linear-gradient(135deg, #f2f5ff 0%, #e4eaff 100%); border-left: 4px solid #6573f1; }
+        .bg-subject-hdtn { background: linear-gradient(135deg, #fff8e0 0%, #ffecb3 100%); border-left: 4px solid #f2a00c; }
+        .draggable { cursor: grab; transition: box-shadow .2s ease, transform .2s ease, opacity .2s ease; position: relative; }
+        .draggable:hover { box-shadow: 0 8px 16px -6px rgba(37,45,110,.28); transform: translateY(-1px); }
+        .draggable:active { cursor: grabbing; opacity: .7; transform: scale(.95); }
+        .drop-zone { transition: background-color .2s, box-shadow .2s; }
+        .drop-zone.drag-over { background-color: var(--ok-soft) !important; box-shadow: inset 0 0 0 2px var(--ok); }
         .view-hidden { display: none !important; }
+
         /* Gợi ý ô đích khi kéo tiết */
-        .drop-zone.slot-ok { background-color: #dcfce7; box-shadow: inset 0 0 0 2px #22c55e; }
-        .drop-zone.slot-swap { background-color: #ede9fe; box-shadow: inset 0 0 0 2px #8b5cf6; }
-        .drop-zone.slot-bad { background-color: #fee2e2; }
+        .drop-zone.slot-ok { background-color: var(--ok-soft); box-shadow: inset 0 0 0 2px var(--ok); }
+        .drop-zone.slot-swap { background-color: var(--swap-soft); box-shadow: inset 0 0 0 2px var(--swap); }
+        .drop-zone.slot-bad { background-color: var(--bad-soft); }
         .drop-zone.slot-bad > .draggable { opacity: .55; }
-        .drop-zone.slot-bad.drag-over { background-color: #fecaca !important; border-color: #ef4444; cursor: not-allowed; }
-        .drop-zone.slot-swap.drag-over { background-color: #ddd6fe !important; border-color: #8b5cf6; }
+        .drop-zone.slot-bad.drag-over { background-color: #ffc9d3 !important; box-shadow: inset 0 0 0 2px var(--bad); cursor: not-allowed; }
+        .drop-zone.slot-swap.drag-over { background-color: #ddd6fe !important; box-shadow: inset 0 0 0 2px var(--swap); }
+
         /* Ô trống của giáo viên */
-        .free-slot { height: 100%; min-height: 40px; display: flex; align-items: center; justify-content: center; border: 1px dashed #86efac; border-radius: 6px; background: #f0fdf4; color: #16a34a; font-size: 11px; font-weight: 600; }
-        .free-cell { background: #dcfce7; color: #15803d; }
-        .free-col-sel { box-shadow: inset 2px 0 0 #1e3a8a, inset -2px 0 0 #1e3a8a; }
-        .draggable { position: relative; }
-        .unplace-btn { display: none; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; align-items: center; justify-content: center; font-size: 9px; line-height: 1; border-radius: 9999px; background: #fff; color: #dc2626; border: 1px solid #fecaca; }
-        .draggable:hover .unplace-btn { display: flex; }
-        .drop-zone.pool-ok { background-color: #dcfce7; box-shadow: inset 0 0 0 2px #22c55e; }
-        .drop-zone.pool-bad { background-color: #fef2f2; }
-        .place-btn { width: 100%; height: 100%; min-height: 40px; border-radius: 6px; background: #16a34a; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-        .place-btn:hover { background: #15803d; }
-        .slot-busy { font-size: 10px; color: #dc2626; text-align: center; padding: 6px 2px; line-height: 1.25; }
-        .free-chip { display: block; width: 100%; text-align: left; padding: 2px 6px; margin-bottom: 2px; border-radius: 4px; font-size: 10px; font-weight: 600; background: #f0fdf4; color: #15803d; border: 1px solid #86efac; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-        .free-chip:hover { background: #16a34a; color: #fff; }
-        .pool-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; cursor: pointer; background: #fff; margin-bottom: 6px; }
-        .pool-item:hover { border-color: #93c5fd; }
-        .pool-item.pool-active { border-color: #16a34a; background: #f0fdf4; box-shadow: 0 0 0 2px #bbf7d0; }
-        .hole-cell { background-image: repeating-linear-gradient(135deg, #fee2e2 0, #fee2e2 5px, #ffffff 5px, #ffffff 10px); }
+        .free-slot { height: 100%; min-height: 40px; display: flex; align-items: center; justify-content: center; border: 1.5px dashed #a9e6cb; border-radius: 10px; background: #f6fdf9; color: var(--ok-ink); font-size: 11px; font-weight: 600; }
+        .free-cell { background: #e1f7ec; color: var(--ok-ink); }
+        .free-col-sel { box-shadow: inset 2px 0 0 var(--brand), inset -2px 0 0 var(--brand); }
         .free-th-btn { cursor: pointer; }
-        .free-th-btn:hover { background: #dbeafe; }
+        .free-th-btn:hover { background: var(--brand-soft); }
+
+        /* Xếp thủ công */
+        .unplace-btn { display: none; position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; align-items: center; justify-content: center; font-size: 9px; line-height: 1; border-radius: 9999px; background: #fff; color: var(--bad-ink); border: 1px solid #ffc9d3; box-shadow: 0 1px 3px rgba(37,45,110,.15); }
+        .unplace-btn:hover { background: var(--bad); color: #fff; border-color: var(--bad); }
+        .draggable:hover .unplace-btn { display: flex; }
+        .drop-zone.pool-ok { background-color: var(--ok-soft); box-shadow: inset 0 0 0 2px var(--ok); }
+        .drop-zone.pool-bad { background-color: #fff5f6; }
+        .place-btn { width: 100%; height: auto; min-height: 44px; border-radius: 10px; background: linear-gradient(135deg, #1dab78, #12905f); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-shadow: 0 4px 10px -4px rgba(18,144,95,.6); transition: filter .15s, transform .15s; }
+        .place-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        .slot-busy { font-size: 10px; color: var(--bad-ink); text-align: center; padding: 6px 2px; line-height: 1.25; }
+        .free-chip { display: block; width: 100%; text-align: left; padding: 2px 8px; margin-bottom: 3px; border-radius: 6px; font-size: 10px; font-weight: 600; background: var(--ok-faint); color: var(--ok-ink); border: 1px solid var(--ok-line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; transition: background .15s, color .15s; }
+        .free-chip:hover { background: var(--ok); color: #fff; border-color: var(--ok); }
+        .pool-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px; cursor: pointer; background: #fff; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(37,45,110,.05); transition: border-color .15s, box-shadow .15s, transform .15s; }
+        .pool-item:hover { border-color: var(--brand-300); box-shadow: 0 6px 14px -6px rgba(37,45,110,.2); transform: translateY(-1px); }
+        .pool-item.pool-active { border-color: var(--ok); background: var(--ok-faint); box-shadow: 0 0 0 3px rgba(29,171,120,.18); }
+        .t-sum { font-size: 11px; font-weight: 600; color: #505974; background: #fff; border: 1px solid var(--line); border-radius: 9999px; padding: 3px 10px; }
+        .t-done { font-size: 11px; font-weight: 700; color: var(--ok-ink); background: var(--ok-soft); border-radius: 9999px; padding: 3px 10px; }
+        .t-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; background: #fff; color: #4045c2; border: 1px solid var(--brand-300); cursor: pointer; box-shadow: 0 1px 2px rgba(37,45,110,.06); transition: box-shadow .15s, border-color .15s, background .15s, transform .15s; }
+        .t-chip b { background: var(--brand-soft); color: #353a9e; border-radius: 9999px; padding: 0 7px; font-size: 10px; line-height: 16px; }
+        .t-chip:hover { border-color: var(--brand); box-shadow: 0 6px 12px -6px rgba(37,45,110,.3); transform: translateY(-1px); }
+        .t-chip.is-active { background: var(--ok); border-color: var(--ok); color: #fff; box-shadow: 0 0 0 3px rgba(29,171,120,.2); }
+        .t-chip.is-active b { background: rgba(255,255,255,.25); color: #fff; }
+        .t-chip.is-full { border-color: #ffc9d3; color: var(--bad-ink); }
+        .t-chip.is-full b { background: var(--bad-soft); color: var(--bad-ink); }
+        .hole-cell { background-image: repeating-linear-gradient(135deg, #ffe2e7 0, #ffe2e7 5px, #ffffff 5px, #ffffff 10px); }
     </style>
 </head>
-<body class="bg-secondary text-gray-800 h-screen overflow-hidden flex font-sans">
+<body class="text-gray-800 h-screen overflow-hidden flex font-sans">
 
     <!-- SIDEBAR -->
-    <aside class="w-20 lg:w-64 bg-primary text-white flex flex-col transition-all duration-300 z-50 shrink-0 shadow-lg">
-        <div class="p-4 flex items-center justify-center lg:justify-start border-b border-blue-800 h-16">
+    <aside class="w-20 lg:w-64 app-sidebar text-white flex flex-col transition-all duration-300 z-50 shrink-0 shadow-lg">
+        <div class="p-4 flex items-center justify-center lg:justify-start border-b border-white/10 h-16">
             <i class="fa-solid fa-calendar-days text-2xl lg:mr-3 text-yellow-300"></i>
-            <h1 class="text-xl font-bold font-mono tracking-wider hidden lg:block text-yellow-300">TKB PRO</h1>
+            <h1 class="text-xl font-extrabold tracking-wide hidden lg:block text-white">TKB <span class="text-yellow-300">PRO</span></h1>
         </div>
         <nav class="flex-1 py-4 space-y-2 overflow-y-auto px-2 lg:px-4">
-            <a href="#" onclick="switchView('data-entry')" id="menu-data-entry" class="menu-item flex items-center justify-center lg:justify-start p-3 rounded bg-blue-800 font-semibold transition group">
-                <i class="fa-solid fa-database text-xl w-6 text-center text-yellow-300"></i>
-                <span class="hidden lg:block ml-3 text-yellow-300">Nhập Dữ Liệu</span>
+            <a href="#" onclick="switchView('data-entry')" id="menu-data-entry" class="menu-item menu-active flex items-center justify-center lg:justify-start p-3 rounded-xl transition group">
+                <i class="fa-solid fa-database text-xl w-6 text-center"></i>
+                <span class="hidden lg:block ml-3">Nhập Dữ Liệu</span>
             </a>
-            <a href="#" onclick="switchView('timetable')" id="menu-timetable" class="menu-item flex items-center justify-center lg:justify-start p-3 rounded hover:bg-blue-800 transition group">
+            <a href="#" onclick="switchView('timetable')" id="menu-timetable" class="menu-item flex items-center justify-center lg:justify-start p-3 rounded-xl transition group">
                 <i class="fa-solid fa-table text-xl w-6 text-center"></i>
                 <span class="hidden lg:block ml-3">Không gian TKB</span>
             </a>
         </nav>
-        <div class="p-4 text-xs text-blue-300 hidden lg:block text-center border-t border-blue-800">
+        <div class="p-4 text-xs text-white/60 hidden lg:block text-center border-t border-white/10">
             <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Auto-Save (Bật)
         </div>
     </aside>
 
     <!-- MAIN -->
-    <main class="flex-1 flex flex-col min-w-0 bg-secondary relative">
-        <header class="bg-white shadow-sm h-16 px-6 flex justify-between items-center z-10 shrink-0">
+    <main class="flex-1 flex flex-col min-w-0 relative">
+        <header class="bg-white/80 backdrop-blur border-b border-gray-200 h-16 px-6 flex justify-between items-center z-10 shrink-0">
             <h2 id="topbar-title" class="text-lg font-bold text-gray-700">Quản lý Dữ liệu Phân công</h2>
             <div class="flex items-center space-x-6">
                 <div class="text-sm font-medium text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full shadow-sm flex items-center">
@@ -140,7 +221,7 @@
                         <p id="data-summary" class="text-xs text-gray-500 mt-1"></p>
                     </div>
                     <div class="flex gap-2 items-center flex-wrap justify-end">
-                        <button onclick="scheduleFromData()" id="btn-schedule-from-data" class="text-sm bg-yellow-500 text-white px-3 py-1.5 rounded hover:bg-yellow-600 transition font-bold shadow-sm">
+                        <button onclick="scheduleFromData()" id="btn-schedule-from-data" class="btn-cta text-sm px-4 py-2 rounded-lg font-bold">
                             <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Xếp TKB từ dữ liệu này
                         </button>
                         <button onclick="mockData()" class="text-sm bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded hover:bg-purple-200 transition font-medium shadow-sm">
@@ -238,7 +319,7 @@
                             </label>
                         </div>
 
-                        <button onclick="runAutoSchedule()" id="btn-run-ai" class="w-full mt-4 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition transform active:scale-95 flex justify-center items-center">
+                        <button onclick="runAutoSchedule()" id="btn-run-ai" class="btn-cta w-full mt-4 font-bold py-3 px-4 rounded-xl transform active:scale-95 flex justify-center items-center">
                             <i class="fa-solid fa-wand-magic-sparkles mr-2 text-lg"></i> XẾP TKB TỪ DỮ LIỆU
                         </button>
                         
@@ -299,10 +380,13 @@
             </div>
 
             <!-- BẢNG LƯỚI TKB BÊN PHẢI -->
-            <div class="flex-1 p-6 flex flex-col bg-gray-50/50 overflow-hidden relative">
+            <div class="flex-1 p-6 flex flex-col overflow-hidden relative">
                 <div class="bg-white flex-1 rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
                     <div class="p-3 border-b flex flex-wrap gap-4 items-center justify-between text-xs font-medium bg-gray-50 shrink-0">
-                        <div class="text-sm font-bold text-gray-700 border-l-4 border-blue-500 pl-2" id="lbl-current-class">Chưa chọn dữ liệu</div>
+                        <div class="flex items-center gap-x-4 gap-y-2 flex-wrap min-w-0">
+                            <div class="text-sm font-bold text-gray-700 border-l-4 border-blue-500 pl-2" id="lbl-current-class">Chưa chọn dữ liệu</div>
+                            <div id="teacher-chips" class="view-hidden items-center gap-2 flex-wrap"></div>
+                        </div>
                         <div class="flex gap-4 items-center flex-wrap">
                             <label class="flex items-center gap-1 cursor-pointer text-green-700" title="Khi xem theo Giáo viên, ghi chữ 'Trống' vào các ô GV chưa có tiết">
                                 <input type="checkbox" id="show-free" checked onchange="renderTimetable()" class="rounded text-green-600"> Hiện tiết trống của GV
@@ -325,8 +409,8 @@
                         <table class="tkb-table w-full border-collapse text-sm text-center">
                             <thead>
                                 <tr>
-                                    <th class="border-b border-r p-3 w-16 min-w-[64px] sticky-col bg-gray-100 shadow-[1px_0_0_#e5e7eb]">Buổi</th>
-                                    <th class="border-b border-r p-3 w-16 min-w-[64px] sticky-col bg-gray-100 shadow-[1px_0_0_#e5e7eb]" style="left: 64px;">Tiết</th>
+                                    <th class="border-b border-r p-3 w-16 min-w-[64px] sticky-col bg-gray-100 shadow-[1px_0_0_#e3e7f1]">Buổi</th>
+                                    <th class="border-b border-r p-3 w-16 min-w-[64px] sticky-col bg-gray-100 shadow-[1px_0_0_#e3e7f1]" style="left: 64px;">Tiết</th>
                                     <th class="border-b border-r p-3 min-w-[150px] bg-white text-blue-900">Thứ 2</th>
                                     <th class="border-b border-r p-3 min-w-[150px] bg-white text-blue-900">Thứ 3</th>
                                     <th class="border-b border-r p-3 min-w-[150px] bg-white text-blue-900">Thứ 4</th>
@@ -348,7 +432,7 @@
     </main>
 
     <!-- HỘP THOẠI XUẤT FILE -->
-    <div id="export-modal" class="view-hidden fixed inset-0 z-40 items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="export-title" onclick="if (event.target === this) closeExportModal()">
+    <div id="export-modal" class="view-hidden fixed inset-0 z-40 items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="export-title" onclick="if (event.target === this) closeExportModal()">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <div class="flex items-center justify-between mb-5">
                 <h3 id="export-title" class="text-lg font-bold text-gray-800"><i class="fa-solid fa-file-export mr-2 text-green-600"></i>Xuất thời khóa biểu</h3>
@@ -408,7 +492,7 @@
     </div>
 
     <!-- HỘP THOẠI TIẾT TRỐNG TOÀN BỘ GV -->
-    <div id="free-modal" class="view-hidden fixed inset-0 z-40 items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="free-title" onclick="if (event.target === this) closeFreeModal()">
+    <div id="free-modal" class="view-hidden fixed inset-0 z-40 items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="free-title" onclick="if (event.target === this) closeFreeModal()">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-full flex flex-col">
             <div class="flex items-center justify-between gap-3 p-4 border-b shrink-0 flex-wrap">
                 <h3 id="free-title" class="text-lg font-bold text-gray-800"><i class="fa-solid fa-table-cells mr-2 text-green-600"></i>Tiết trống của giáo viên</h3>
@@ -513,10 +597,7 @@
         function switchView(viewName) {
             document.querySelectorAll('.menu-item').forEach(el => {
                 const active = el.id === `menu-${viewName}`;
-                el.classList.toggle('bg-blue-800', active);
-                el.classList.toggle('hover:bg-blue-800', !active);
-                el.classList.toggle('font-semibold', active);
-                el.querySelectorAll('span, i').forEach(x => x.classList.toggle('text-yellow-300', active));
+                el.classList.toggle('menu-active', active);
             });
             ['data-entry', 'timetable'].forEach(v => {
                 const el = $(`view-${v}`), show = v === viewName;
@@ -1080,7 +1161,7 @@
             const selectedVal = sel.value;
             $('lbl-current-class').innerText = selectedVal ? (viewType === 'class' ? `Lớp ${selectedVal}` : `Giáo viên: ${selectedVal}`) : "Chưa chọn dữ liệu";
             const tbody = $('tkb-body'), hasData = buildLessons().length > 0;
-            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel();
+            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel(); renderTeacherChips();
             const sess = globalSchedule.length ? checkSessionRules() : null; renderSessionPanel(sess);
 
             if (!hasData) {
@@ -1095,8 +1176,8 @@
             let html = '';
             for (let i = 1; i <= 5; i++) {
                 html += `<tr>`;
-                if (i === 1) html += `<td rowspan="5" class="w-16 min-w-[64px] border-b border-r font-bold text-gray-700 bg-white sticky-col shadow-[1px_0_0_#e5e7eb]" style="writing-mode: vertical-rl">SÁNG</td>`;
-                html += `<td class="w-16 min-w-[64px] border-b border-r bg-gray-50 sticky-col font-medium shadow-[1px_0_0_#e5e7eb]" style="left:64px;">Tiết ${i}</td>`;
+                if (i === 1) html += `<td rowspan="5" class="w-16 min-w-[64px] border-b border-r font-bold text-gray-700 bg-white sticky-col shadow-[1px_0_0_#e3e7f1]" style="writing-mode: vertical-rl">SÁNG</td>`;
+                html += `<td class="w-16 min-w-[64px] border-b border-r bg-gray-50 sticky-col font-medium shadow-[1px_0_0_#e3e7f1]" style="left:64px;">Tiết ${i}</td>`;
                 DAYS.forEach(day => {
                     const cellData = selectedVal ? globalSchedule.find(s => (viewType === 'class' ? s.cls === selectedVal : s.teacher === selectedVal) && s.day === day && s.period === `s${i}`) : null;
                     const ec = cellData ? null : emptyCell(viewType, selectedVal, day, `s${i}`);
@@ -1262,6 +1343,34 @@
             return null;
         }
 
+        // Số ô trong tuần mà tiết này có thể xếp vào (GV và lớp cùng rảnh)
+        function countPlaceable(e) {
+            let n = 0;
+            DAYS.forEach(d => PERIODS.forEach(p => { if (!placeConflict(e, d, p)) n++; }));
+            return n;
+        }
+
+        // Cạnh tên GV (xem theo Giáo viên): các tiết còn có thể xếp thủ công
+        function renderTeacherChips() {
+            const box = $('teacher-chips'); if (!box) return;
+            const viewType = $('view-type').value, val = $('main-filter').value;
+            if (viewType !== 'teacher' || !val) { box.classList.add('view-hidden'); box.classList.remove('flex'); box.innerHTML = ''; return; }
+            const total = dbTeachers.filter(t => t.name === val).reduce((a, t) => a + (t.teaching || []).reduce((b, x) => b + (parseInt(x.prd) || 0), 0), 0);
+            const placed = globalSchedule.filter(x => x.teacher === val).length;
+            const left = poolList.reduce((a, e) => a + e.left, 0);
+            let html = `<span class="t-sum" title="Số tiết đã có trên lưới / tổng số tiết được phân công">Đã xếp ${placed}/${total} tiết</span>`;
+            if (!left) html += `<span class="t-done"><i class="fa-solid fa-circle-check mr-1"></i>Đã xếp đủ tiết</span>`;
+            else {
+                html += `<span class="text-[11px] font-semibold text-amber-700">Còn ${left} tiết xếp thủ công được:</span>`;
+                html += poolList.map((e, i) => {
+                    const can = countPlaceable(e);
+                    const tip = `${e.subject} lớp ${e.cls}: còn ${e.left}/${e.total} tiết, ${can ? `xếp được vào ${can} ô` : 'không còn ô nào phù hợp'}. Bấm để chọn rồi bấm ô xanh trong bảng, hoặc kéo thả vào ô trống.`;
+                    return `<span class="t-chip${e.key === poolSel ? ' is-active' : ''}${can ? '' : ' is-full'}" draggable="true" title="${esc(tip)}" onclick="selectPool(${i})" ondragstart="dragPool(event,${i})" ondragend="dragEnd()">${esc(e.subject)} - lớp ${esc(e.cls)}<b>${e.left} tiết · ${can} ô</b></span>`;
+                }).join('');
+            }
+            box.innerHTML = html; box.classList.remove('view-hidden'); box.classList.add('flex');
+        }
+
         function renderPoolPanel() {
             const el = $('pool-list'), head = $('pool-head'); if (!el) return;
             const viewType = $('view-type').value, val = $('main-filter').value;
@@ -1270,8 +1379,7 @@
             const left = poolList.reduce((a, e) => a + e.left, 0);
             head.innerHTML = left ? `${esc(who)}: còn <b class="text-amber-700">${left}</b> tiết chưa xếp.` : `${esc(who)}: đã xếp đủ tiết.`;
             el.innerHTML = poolList.map((e, i) => {
-                let can = 0;
-                DAYS.forEach(d => PERIODS.forEach(p => { if (!placeConflict(e, d, p)) can++; }));
+                const can = countPlaceable(e);
                 const freeOwn = viewType === 'class' ? SLOT_COUNT - busyCount(tBusyIdx, e.teacher) : SLOT_COUNT - busyCount(cBusyIdx, e.cls);
                 return `<div class="pool-item${e.key === poolSel ? ' pool-active' : ''}" draggable="true" onclick="selectPool(${i})" ondragstart="dragPool(event,${i})" ondragend="dragEnd()">
                     <div class="flex justify-between gap-2 text-sm"><b class="truncate">${esc(e.subject)}</b><span class="shrink-0 text-xs font-bold text-amber-700">còn ${e.left}/${e.total}</span></div>
