@@ -49,6 +49,7 @@
         .pool-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; cursor: pointer; background: #fff; margin-bottom: 6px; }
         .pool-item:hover { border-color: #93c5fd; }
         .pool-item.pool-active { border-color: #16a34a; background: #f0fdf4; box-shadow: 0 0 0 2px #bbf7d0; }
+        .hole-cell { background-image: repeating-linear-gradient(135deg, #fee2e2 0, #fee2e2 5px, #ffffff 5px, #ffffff 10px); }
         .free-th-btn { cursor: pointer; }
         .free-th-btn:hover { background: #dbeafe; }
     </style>
@@ -200,6 +201,15 @@
                                 <span class="font-semibold">Chỉ xếp tiết Sáng (T2-T7)</span>
                             </label>
                         </div>
+                        <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm">
+                            <label class="flex items-start cursor-pointer text-blue-900">
+                                <input type="checkbox" id="ai-pack" checked class="mt-0.5 mr-2 rounded text-blue-600 focus:ring-blue-500">
+                                <div>
+                                    <span class="font-semibold">Gói gọn buổi học, không trống tiết</span>
+                                    <p class="text-[11px] text-blue-800/80 mt-1 leading-tight">Xếp liền từ tiết 1, mỗi buổi tối thiểu 4 tiết. Các lớp cùng khối có cùng số tiết mỗi buổi.</p>
+                                </div>
+                            </label>
+                        </div>
                         <div class="p-3 hover:bg-gray-50 border rounded-lg text-sm transition">
                             <label class="flex items-start cursor-pointer text-gray-800">
                                 <input type="checkbox" id="ai-dayoff" checked class="mt-0.5 mr-2 rounded text-blue-600 focus:ring-blue-500"> 
@@ -242,6 +252,11 @@
                         <p class="mt-2 text-xs text-left leading-relaxed">Tiết nào chưa xếp thì chọn ở mục <b>Tiết cần xếp</b> bên dưới; bảng sẽ cho thấy ô nào giáo viên đang trống. Khi đang kéo một tiết, ô <b class="text-green-600">xanh lá</b> là tiết trống chuyển được, ô <b class="text-violet-600">tím</b> là đổi chỗ được, ô <b class="text-red-500">đỏ</b> là bị trùng GV hoặc lớp.</p>
                         <p class="mt-3 text-[10px] text-green-600 font-bold bg-green-100 rounded px-2 py-1"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Tự động lưu khi kéo thả</p>
                     </div>
+                </div>
+
+                <div class="p-5 border-b" id="session-panel">
+                    <h3 class="font-bold text-gray-800 mb-2 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-clipboard-check mr-2"></i>Kiểm tra buổi học</h3>
+                    <div id="session-body"></div>
                 </div>
 
                 <div class="p-5 border-b" id="pool-panel">
@@ -288,6 +303,7 @@
                                 <span class="flex items-center gap-1"><span class="w-3 h-3 block bg-violet-200 border border-violet-500"></span> Đổi chỗ được</span>
                                 <span class="flex items-center gap-1"><span class="w-3 h-3 block bg-red-200 border border-red-400"></span> Trùng GV/lớp</span>
                             </span>
+                            <span class="flex items-center gap-1"><span class="w-3 h-3 block bg-red-100 border border-red-400"></span> Trống giữa buổi</span>
                             <span class="flex items-center gap-1"><span class="w-3 h-3 block bg-blue-100 border border-blue-400"></span> Môn Văn hóa</span>
                             <span class="flex items-center gap-1"><span class="w-3 h-3 block bg-yellow-100 border border-yellow-400"></span> HĐTN / GDĐP</span>
                             <button onclick="openExportModal()" id="btn-export" class="bg-green-600 text-white px-3 py-1.5 rounded-md font-bold hover:bg-green-700 transition shadow-sm">
@@ -428,6 +444,7 @@
     <script>
         const DUTY_PERIODS = { "GVCN": 4, "Bí thư Đoàn": 6, "Tổ phó": 1, "Tổ trưởng": 3, "Phó BT Đoàn": 2, "Công đoàn": 3 };
         const DAYS = ['t2', 't3', 't4', 't5', 't6', 't7'];
+        const MIN_PERIODS = 4;
         const PERIODS = ['s1', 's2', 's3', 's4', 's5'];
         const DEFAULT_DEPTS = ['Tổ Toán - Tin', 'Tổ Ngữ văn', 'Tổ Ngoại ngữ', 'Tổ Lý - Hóa - Sinh'];
 
@@ -638,16 +655,157 @@
             return list;
         }
 
-        function analyzeData(lessons) {
+        // Khối của lớp: lấy số đứng đầu tên lớp (10A1 -> 10)
+        function gradeOf(cls) { const m = String(cls).trim().match(/^\d+/); return m ? m[0] : String(cls).trim(); }
+
+        // Chia số tiết/tuần của lớp thành các buổi 4-5 tiết, mỗi buổi xếp liền từ tiết 1
+        function gradePattern(total) {
+            const nd = DAYS.length, maxP = PERIODS.length;
+            if (total >= nd * maxP) return { counts: DAYS.map(() => maxP), ok: true, days: nd };
+            let k = 0;
+            for (let c = nd; c >= 1; c--) if (MIN_PERIODS * c <= total && total <= maxP * c) { k = c; break; }
+            const ok = k > 0;
+            if (!k) k = Math.min(nd, Math.max(1, Math.ceil(total / maxP)));
+            const base = Math.floor(total / k), extra = total - base * k, counts = DAYS.map(() => 0);
+            for (let i = 0; i < k; i++) counts[Math.floor(i * nd / k)] = base + (i < extra ? 1 : 0);
+            return { counts, ok, days: k };
+        }
+
+        // Mỗi khối dùng chung 1 khung số tiết theo ngày; trả về các ô được phép của từng lớp
+        function buildGradePlans(clsCount) {
+            const groups = new Map(), clsSlots = new Map(), plans = [], warnings = [];
+            clsCount.forEach((n, c) => { const g = gradeOf(c); if (!groups.has(g)) groups.set(g, []); groups.get(g).push([c, n]); });
+            groups.forEach((list, g) => {
+                const total = Math.max(...list.map(x => x[1])), pat = gradePattern(total);
+                if (!pat.ok) warnings.push(`Khối ${g}: mỗi lớp chỉ có ${total} tiết/tuần nên không chia được thành các buổi từ ${MIN_PERIODS} tiết trở lên.`);
+                else if (pat.days < DAYS.length) warnings.push(`Khối ${g}: ${total} tiết/tuần nên chỉ xếp ${pat.days} buổi/tuần (mỗi buổi ${MIN_PERIODS}-${PERIODS.length} tiết).`);
+                const diff = list.filter(x => x[1] !== total);
+                if (diff.length) warnings.push(`Khối ${g}: các lớp không cùng số tiết/tuần (${list.slice(0, 8).map(([c, n]) => `${c}: ${n}`).join(', ')}${list.length > 8 ? '...' : ''}). Lớp ít tiết hơn sẽ có buổi ngắn hơn.`);
+                const all = [];
+                pat.counts.forEach((cnt, di) => { for (let pi = 0; pi < cnt; pi++) all.push([di, pi]); });
+                all.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+                list.forEach(([c, n]) => clsSlots.set(c, all.slice(0, n)));
+                plans.push({ grade: g, total, counts: pat.counts, ok: pat.ok });
+            });
+            return { plans, clsSlots, warnings };
+        }
+
+        function analyzeData(lessons, opts) {
             const cap = DAYS.length * PERIODS.length;
             const cls = new Map(), tch = new Map(), warnings = [];
             lessons.forEach(l => { cls.set(l.cls, (cls.get(l.cls) || 0) + 1); tch.set(l.teacher, (tch.get(l.teacher) || 0) + 1); });
             cls.forEach((n, c) => { if (n > cap) warnings.push(`Lớp ${c} có ${n} tiết/tuần, nhiều hơn ${cap} ô của lưới.`); });
             tch.forEach((n, t) => { if (n > cap) warnings.push(`${t} dạy ${n} tiết/tuần, nhiều hơn ${cap} ô của lưới.`); });
-            return { warnings, clsCount: cls, tchCount: tch };
+            const plan = buildGradePlans(cls);
+            if (opts && opts.pack) warnings.push(...plan.warnings);
+            return { warnings, clsCount: cls, tchCount: tch, plan };
         }
 
-        function attemptSchedule(baseLessons, opts, clsCount, tchCount) {
+        // Xếp theo khung buổi học: mỗi lớp lấp đầy các ô liền từ tiết 1, chỉ cần hoán đổi tiết trong lớp để hết trùng GV
+        function attemptPacked(baseLessons, opts, info) {
+            const nD = DAYS.length, nP = PERIODS.length, nS = nD * nP;
+            const W_CLASH = 1000, W_OFF = 8, W_SUBJ = 6, W_CONSEC = 30, W_TDAY = 1;
+            const tIdx = new Map(), cIdx = new Map(), sIdx = new Map();
+            baseLessons.forEach(l => {
+                if (!tIdx.has(l.teacher)) tIdx.set(l.teacher, tIdx.size);
+                if (!cIdx.has(l.cls)) cIdx.set(l.cls, cIdx.size);
+                if (!sIdx.has(l.subject)) sIdx.set(l.subject, sIdx.size);
+            });
+            const nT = tIdx.size, nC = cIdx.size, nSub = sIdx.size, nL = baseLessons.length;
+            const lessons = baseLessons.map(l => ({ ...l, day: null, period: null }));
+            const lt = lessons.map(l => tIdx.get(l.teacher)), lc = lessons.map(l => cIdx.get(l.cls)), ls = lessons.map(l => sIdx.get(l.subject));
+            const slotOf = new Int16Array(nL).fill(-1);
+            const tOcc = new Int16Array(nT * nS), tDay = new Int16Array(nT * nD), subjDay = new Int16Array(nC * nSub * nD), cSlot = new Int16Array(nC * nS).fill(-1);
+            const dayOff = new Int8Array(nT).fill(-1);
+            if (opts.dayOff) dbTeachers.forEach(t => { if (tIdx.has(t.name) && (t.teachPeriods || 0) <= 25) dayOff[tIdx.get(t.name)] = Math.floor(Math.random() * nD); });
+
+            const allowed = new Array(nC);
+            cIdx.forEach((c, name) => { allowed[c] = (info.plan.clsSlots.get(name) || []).map(([di, pi]) => di * nP + pi); });
+
+            const add = (i, s) => { slotOf[i] = s; const d = (s / nP) | 0; tOcc[lt[i] * nS + s]++; tDay[lt[i] * nD + d]++; subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + s] = i; };
+            const del = (i) => { const s = slotOf[i], d = (s / nP) | 0; tOcc[lt[i] * nS + s]--; tDay[lt[i] * nD + d]--; subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + s] = -1; slotOf[i] = -1; };
+            const adj = (i, s) => {
+                if (!opts.noConsec) return 0;
+                const p = s % nP; let c = 0;
+                if (p > 0) { const o = cSlot[lc[i] * nS + s - 1]; if (o >= 0 && ls[o] === ls[i]) c += W_CONSEC; }
+                if (p < nP - 1) { const o = cSlot[lc[i] * nS + s + 1]; if (o >= 0 && ls[o] === ls[i]) c += W_CONSEC; }
+                return c;
+            };
+            const costAt = (i, s) => {
+                const d = (s / nP) | 0;
+                let c = W_CLASH * tOcc[lt[i] * nS + s] + W_SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + W_TDAY * tDay[lt[i] * nD + d] + adj(i, s);
+                if (dayOff[lt[i]] === d) c += W_OFF;
+                return c;
+            };
+            const softOf = (i) => {
+                const s = slotOf[i], d = (s / nP) | 0;
+                return (dayOff[lt[i]] === d ? 1 : 0) + (subjDay[(lc[i] * nSub + ls[i]) * nD + d] > 1 ? 1 : 0) + (adj(i, s) ? 1 : 0);
+            };
+            const deltaSwap = (a, b) => {
+                const sa = slotOf[a], sb = slotOf[b];
+                del(a); del(b);
+                let before = costAt(a, sa); add(a, sa); before += costAt(b, sb); del(a);
+                let after = costAt(a, sb); add(a, sb); after += costAt(b, sa); del(a);
+                add(a, sa); add(b, sb);
+                return after - before;
+            };
+            const applySwap = (a, b) => { const sa = slotOf[a], sb = slotOf[b]; del(a); del(b); add(a, sb); add(b, sa); };
+
+            // 1) Xếp tham lam vào các ô được phép của lớp
+            const load = lessons.map((l, i) => (info.tchCount.get(l.teacher) || 0) + (info.clsCount.get(l.cls) || 0));
+            const order = shuffle(lessons.map((_, i) => i)).sort((a, b) => load[b] - load[a]);
+            for (const i of order) {
+                const c = lc[i]; let best = -1, bestCost = Infinity;
+                for (const s of allowed[c]) {
+                    if (cSlot[c * nS + s] >= 0) continue;
+                    const cost = costAt(i, s) + Math.random() * 2;
+                    if (cost < bestCost) { bestCost = cost; best = s; }
+                }
+                if (best >= 0) add(i, best);
+            }
+            const placed = []; for (let i = 0; i < nL; i++) if (slotOf[i] >= 0) placed.push(i);
+            const byCls = Array.from({ length: nC }, () => []); placed.forEach(i => byCls[lc[i]].push(i));
+
+            // 2) Hoán đổi tiết trong cùng lớp cho đến khi hết trùng giáo viên
+            const t0 = performance.now(), MAX_ITER = 3000 + nL * 8;
+            for (let iter = 0; iter < MAX_ITER && performance.now() - t0 < 500; iter++) {
+                const conf = []; for (const i of placed) if (tOcc[lt[i] * nS + slotOf[i]] > 1) conf.push(i);
+                if (!conf.length) break;
+                const a = conf[(Math.random() * conf.length) | 0], mates = byCls[lc[a]];
+                if (mates.length < 2) continue;
+                let bestB = -1, bestD = Infinity;
+                for (const b of mates) { if (b === a) continue; const d = deltaSwap(a, b) + Math.random() * 0.5; if (d < bestD) { bestD = d; bestB = b; } }
+                if (bestD < 0) applySwap(a, bestB);
+                else if (Math.random() < 0.3) { let b = mates[(Math.random() * mates.length) | 0]; if (b !== a) applySwap(a, b); }
+            }
+
+            // 3) Tối ưu mềm (nghỉ 1 ngày, tránh liền 2 tiết cùng môn, tránh 1 môn nhiều lần/ngày); không bao giờ gây trùng mới
+            const t1 = performance.now();
+            for (let k = 0; k < nL * 6 && performance.now() - t1 < 200; k++) {
+                const a = placed[(Math.random() * placed.length) | 0];
+                if (softOf(a) === 0 && Math.random() < 0.8) continue;
+                const mates = byCls[lc[a]]; let bestB = -1, bestD = 0;
+                for (const b of mates) { if (b === a) continue; const d = deltaSwap(a, b); if (d < bestD) { bestD = d; bestB = b; } }
+                if (bestB >= 0) applySwap(a, bestB);
+            }
+
+            // 4) Còn trùng GV thì gỡ tiết thừa ra để lưới luôn hợp lệ
+            const seen = new Set();
+            for (const i of placed) { const key = lt[i] * nS + slotOf[i]; if (seen.has(key)) del(i); else seen.add(key); }
+
+            lessons.forEach((L, i) => { if (slotOf[i] >= 0) { L.day = DAYS[(slotOf[i] / nP) | 0]; L.period = PERIODS[slotOf[i] % nP]; } });
+            const unplaced = lessons.filter(l => l.day === null);
+            let consec = 0, spread = 0;
+            for (let i = 0; i < nL; i++) {
+                if (slotOf[i] < 0 || slotOf[i] % nP === nP - 1) continue;
+                const o = cSlot[lc[i] * nS + slotOf[i] + 1]; if (o >= 0 && ls[o] === ls[i]) consec++;
+            }
+            subjDay.forEach(v => { if (v > 1) spread += v - 1; });
+            return { lessons, unplaced, consec, quality: unplaced.length * 100000 + (opts.noConsec ? consec * 1000 : 0) + spread * 10 };
+        }
+
+        function attemptSchedule(baseLessons, opts, clsCount, tchCount, info) {
+            if (opts.pack && info) return attemptPacked(baseLessons, opts, info);
             const key = (x, d, p) => `${x}|${d}|${p}`;
             const tSlot = new Map(), cSlot = new Map();
             const teacherDay = new Map(), classDay = new Map(), subjDay = new Map();
@@ -739,18 +897,19 @@
             if (globalSchedule.length > 0 && !confirm("TKB hiện tại sẽ bị thay thế. Tiếp tục?")) return;
 
             setMode('auto');
-            const info = analyzeData(lessons), opts = { dayOff: $('ai-dayoff').checked, noConsec: $('ai-noconsecutive').checked };
+            const opts = { dayOff: $('ai-dayoff').checked, noConsec: $('ai-noconsecutive').checked, pack: $('ai-pack').checked };
+            const info = analyzeData(lessons, opts);
             const bar = $('ai-bar'), pct = $('ai-percent');
             isScheduling = true; $('schedule-report').classList.add('hidden');
             bar.style.width = '0%'; pct.innerText = '0%'; setSchedulingUI(true);
 
-            const MAX_ATTEMPTS = 25, LIMIT_MS = 1500, t0 = performance.now();
+            const MAX_ATTEMPTS = opts.pack ? 8 : 25, LIMIT_MS = opts.pack ? 4000 : 1500, t0 = performance.now();
             let attempts = 0, best = null;
             const step = () => {
                 try {
                     const sliceStart = performance.now();
                     do {
-                        const r = attemptSchedule(lessons, opts, info.clsCount, info.tchCount);
+                        const r = attemptSchedule(lessons, opts, info.clsCount, info.tchCount, info);
                         attempts++;
                         if (!best || r.quality < best.quality) best = r;
                     } while (attempts < MAX_ATTEMPTS && performance.now() - sliceStart < 40 && best.quality >= 1);
@@ -776,7 +935,7 @@
             const missing = new Map();
             best.unplaced.forEach(l => { const k = `${l.teacher}|${l.subject}|${l.cls}`; missing.set(k, (missing.get(k) || 0) + 1); });
             lastReport = {
-                placed: globalSchedule.length, total: best.lessons.length, consec: opts.noConsec ? best.consec : 0,
+                placed: globalSchedule.length, total: best.lessons.length, pack: !!opts.pack, consec: opts.noConsec ? best.consec : 0,
                 warnings: info.warnings, missing: Array.from(missing.entries()).map(([k, n]) => { const [t, s, c] = k.split('|'); return `${t} - ${s} - Lớp ${c}: thiếu ${n} tiết`; })
             };
             $('ai-bar').style.width = '100%'; $('ai-percent').innerText = '100%'; freeSlotSel = null;
@@ -798,8 +957,54 @@
             if (r.consec > 0) html += `<div class="mb-1">Còn ${r.consec} cặp tiết liền nhau cùng môn.</div>`;
             if (r.missing.length) html += `<div class="font-semibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.warnings.length) html += `<div class="font-semibold">Dữ liệu cần kiểm tra:</div><ul class="list-disc pl-4">${r.warnings.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
+            if (r.pack && r.missing.length) html += `<div class="mt-1">Mẹo: GV có quá nhiều tiết trùng khung buổi của các lớp. Hãy giảm tiết dồn vào 1 khối, hoặc bỏ chọn "Gói gọn buổi học" rồi xếp lại.</div>`;
             if (ok) html += `<div>Không có xung đột GV hoặc lớp.</div>`;
             el.innerHTML = html;
+        }
+
+        // Kiểm tra quy tắc buổi học trên TKB hiện có (dùng cho cả xếp tự động lẫn thủ công)
+        function checkSessionRules() {
+            const has = new Set(globalSchedule.map(x => `${x.cls}|${x.day}|${x.period}`));
+            const classes = listEntities('class'), stat = new Map(), issues = [];
+            classes.forEach(c => DAYS.forEach(d => {
+                const used = PERIODS.map(p => has.has(`${c}|${d}|${p}`));
+                const n = used.filter(Boolean).length, last = used.lastIndexOf(true), holes = [], problems = [];
+                for (let k = 0; k < last; k++) if (!used[k]) holes.push(k);
+                if (holes.length) { const t = `trống tiết ${holes.map(k => k + 1).join(', ')} giữa buổi`; problems.push(t); issues.push({ cls: c, text: `Lớp ${c} - Thứ ${d.slice(1)}: ${t}.` }); }
+                if (n > 0 && n < MIN_PERIODS) { const t = `chỉ có ${n} tiết (tối thiểu ${MIN_PERIODS})`; problems.push(t); issues.push({ cls: c, text: `Lớp ${c} - Thứ ${d.slice(1)}: ${t}.` }); }
+                stat.set(`${c}|${d}`, { n, holes, problems });
+            }));
+            const byGrade = new Map();
+            classes.forEach(c => { const g = gradeOf(c); if (!byGrade.has(g)) byGrade.set(g, []); byGrade.get(g).push(c); });
+            byGrade.forEach((list, g) => {
+                if (list.length < 2) return;
+                DAYS.forEach(d => {
+                    const counts = list.map(c => stat.get(`${c}|${d}`).n);
+                    if (new Set(counts).size < 2) return;
+                    const t = `các lớp khối ${g} khác số tiết (${list.slice(0, 6).map((c, i) => `${c}: ${counts[i]}`).join(', ')}${list.length > 6 ? '...' : ''})`;
+                    list.forEach(c => stat.get(`${c}|${d}`).problems.push(t));
+                    issues.push({ cls: list[counts.indexOf(Math.min(...counts))], text: `Thứ ${d.slice(1)}: ${t}.` });
+                });
+            });
+            return { issues, stat };
+        }
+
+        function renderSessionPanel(sess) {
+            const el = $('session-body'); if (!el) return;
+            if (!sess) { el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có TKB để kiểm tra.</div>`; return; }
+            if (!sess.issues.length) {
+                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt: tiết xếp liền từ tiết 1, mỗi buổi tối thiểu ${MIN_PERIODS} tiết, các lớp cùng khối có cùng số tiết mỗi buổi.</div>`;
+                return;
+            }
+            const shown = sess.issues.slice(0, 40);
+            el.innerHTML = `<div class="text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-2 leading-relaxed">
+                <div class="font-bold mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Có ${sess.issues.length} chỗ chưa đạt (bấm để xem lớp)</div>
+                <ul class="list-disc pl-4 max-h-44 overflow-y-auto">${shown.map(i => `<li><button type="button" class="text-left hover:underline" data-cls="${esc(i.cls)}" onclick="gotoClass(this.dataset.cls)">${esc(i.text)}</button></li>`).join('')}${sess.issues.length > shown.length ? `<li>... và ${sess.issues.length - shown.length} chỗ nữa</li>` : ''}</ul>
+            </div>`;
+        }
+        function gotoClass(c) {
+            $('view-type').value = 'class'; updateFilterDropdown();
+            $('main-filter').value = c; poolSel = null; renderTimetable();
         }
 
         function clearTimetable() {
@@ -817,6 +1022,7 @@
             $('lbl-current-class').innerText = selectedVal ? (viewType === 'class' ? `Lớp ${selectedVal}` : `Giáo viên: ${selectedVal}`) : "Chưa chọn dữ liệu";
             const tbody = $('tkb-body'), hasData = buildLessons().length > 0;
             buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel();
+            const sess = globalSchedule.length ? checkSessionRules() : null; renderSessionPanel(sess);
 
             if (!hasData) {
                 tbody.innerHTML = `<tr><td colspan="8" class="p-16 text-center text-gray-500 bg-gray-50 h-[400px] border-b border-gray-200"><h3 class="text-2xl font-bold text-gray-700 mb-2">Chưa có dữ liệu phân công</h3><button onclick="switchView('data-entry')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition">Đi tới Nhập Dữ Liệu</button></td></tr>`;
@@ -835,18 +1041,32 @@
                 DAYS.forEach(day => {
                     const cellData = selectedVal ? globalSchedule.find(s => (viewType === 'class' ? s.cls === selectedVal : s.teacher === selectedVal) && s.day === day && s.period === `s${i}`) : null;
                     const ec = cellData ? null : emptyCell(viewType, selectedVal, day, `s${i}`);
-                    html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]${ec ? ec.cls : ''}" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
+                    const hst = (sess && viewType === 'class' && selectedVal) ? sess.stat.get(`${selectedVal}|${day}`) : null;
+                    const isHole = !cellData && !!hst && hst.holes.includes(i - 1);
+                    html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]${ec ? ec.cls : ''}${isHole ? ' hole-cell' : ''}" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
                     if (cellData) {
                         const bgClass = cellData.type === 'hdtn' ? 'bg-subject-hdtn' : 'bg-subject-normal';
                         const bottomText = viewType === 'class' ? `<i class="fa-solid fa-user-tie mr-1"></i>${esc(cellData.teacher)}` : `<i class="fa-solid fa-users mr-1"></i>Lớp ${esc(cellData.cls)}`;
                         html += `<div id="${esc(cellData.id)}" class="draggable ${bgClass} rounded p-2 text-left h-full shadow-sm hover:shadow transition border border-transparent hover:border-blue-300" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)"><div class="font-bold text-gray-800 text-xs truncate" title="${esc(cellData.subject)}">${esc(cellData.subject)}</div><div class="text-[11px] text-gray-600 mt-1 truncate">${bottomText}</div><button type="button" class="unplace-btn" title="Gỡ tiết này về danh sách chưa xếp" onclick="event.stopPropagation(); unplaceLesson('${esc(cellData.id)}')"><i class="fa-solid fa-xmark"></i></button></div>`;
-                    } else if (ec) {
-                        html += ec.html;
+                    } else {
+                        html += (isHole ? `<div class="text-[10px] font-bold text-red-600 text-center mb-0.5">Trống giữa buổi</div>` : '') + (ec ? ec.html : '');
                     }
                     html += `</td>`;
                 });
                 html += `</tr>`;
             }
+            html += `<tr class="bg-gray-50"><td colspan="2" class="border-b border-r p-2 text-xs font-semibold text-gray-600 sticky-col" style="left:0">Số tiết/buổi</td>`;
+            DAYS.forEach(day => {
+                let n = '', tone = 'text-gray-500', tip = '';
+                if (selectedVal && viewType === 'class') {
+                    const st = sess ? sess.stat.get(`${selectedVal}|${day}`) : null;
+                    n = st ? st.n : 0;
+                    if (st && st.problems.length) { tone = 'text-red-600 font-bold'; tip = st.problems.join('\n'); }
+                    else if (n) { tone = 'text-green-700 font-bold'; tip = 'Đạt yêu cầu'; }
+                } else if (selectedVal) n = globalSchedule.filter(x => x.teacher === selectedVal && x.day === day).length;
+                html += `<td class="border-b border-r p-2 text-sm ${tone}" title="${esc(tip)}">${n === 0 ? '–' : n}</td>`;
+            });
+            html += `</tr>`;
             tbody.innerHTML = html;
         }
 
