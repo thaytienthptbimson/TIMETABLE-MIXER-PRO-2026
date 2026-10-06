@@ -171,8 +171,12 @@
 
         <!-- VIEW 1: DỮ LIỆU -->
         <div id="view-data-entry" class="flex flex-1 overflow-auto p-6 flex-col lg:flex-row gap-6">
-            <div class="w-full lg:w-1/3 bg-white p-6 rounded-lg shadow-sm border border-gray-200 h-fit mb-6 lg:mb-0">
+            <div class="w-full lg:w-1/3 bg-white p-6 rounded-lg shadow-sm border border-gray-200 h-fit mb-6 lg:mb-0 lg:sticky lg:top-0 lg:self-start lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
                 <form id="dataForm" onsubmit="saveTeacherData(event)">
+                    <div id="edit-banner" class="hidden mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm flex items-center justify-between gap-2">
+                        <span class="text-yellow-800 min-w-0"><i class="fa-solid fa-pen-to-square mr-1"></i>Đang sửa: <b id="edit-name" class="break-words"></b></span>
+                        <button type="button" onclick="cancelEdit()" class="shrink-0 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-50 transition">Hủy sửa</button>
+                    </div>
                     <div class="mb-5 border-b pb-4">
                         <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-user text-sm mr-1"></i> 1. Thông tin chung</h3>
                         <div class="mb-3">
@@ -187,14 +191,13 @@
                     </div>
 
                     <div class="mb-5 border-b pb-4">
-                        <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-briefcase text-sm mr-1"></i> 2. Kiêm nhiệm</h3>
-                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="GVCN"><span>Chủ nhiệm (+4)</span></label>
-                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Tổ trưởng"><span>Tổ trưởng (+3)</span></label>
-                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Tổ phó"><span>Tổ phó (+1)</span></label>
-                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="Bí thư Đoàn"><span>BT Đoàn (+6)</span></label>
-                            <label class="flex items-center space-x-2"><input type="checkbox" name="kiem_nhiem" value="PBT Đoàn"><span>PBT Đoàn (+2)</span></label>
-                        </div>
+                        <h3 class="font-bold text-blue-800 mb-1"><i class="fa-solid fa-briefcase text-sm mr-1"></i> 2. Kiêm nhiệm</h3>
+                        <p class="text-[11px] text-gray-500 mb-3">Tick chọn rồi nhập số tiết được giảm (có thể đổi, kể cả số lẻ như 1.5).</p>
+                        <div id="duty_container" class="space-y-1"></div>
+                        <div id="duty_extra_container" class="space-y-2 mt-2"></div>
+                        <button type="button" onclick="addExtraDutyRow()" class="mt-2 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 transition">
+                            <i class="fa-solid fa-plus mr-1"></i>Thêm kiêm nhiệm khác
+                        </button>
                     </div>
 
                     <div class="mb-5">
@@ -206,8 +209,8 @@
                         </div>
                         <div id="teaching_container" class="space-y-3"></div>
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded shadow hover:bg-blue-700 transition">
-                        <i class="fa-solid fa-floppy-disk mr-2"></i> LƯU DỮ LIỆU
+                    <button type="submit" id="btn-save-teacher" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded shadow hover:bg-blue-700 transition">
+                        <i class="fa-solid fa-floppy-disk mr-2"></i><span id="btn-save-label">LƯU DỮ LIỆU</span>
                     </button>
                 </form>
             </div>
@@ -240,7 +243,7 @@
                                 <th class="border p-2 text-left w-1/4">Kiêm nhiệm</th>
                                 <th class="border p-2 text-left w-1/3">Dạy thực tế</th>
                                 <th class="border p-2 text-center">Tổng tiết</th>
-                                <th class="border p-2 text-center">Xóa</th>
+                                <th class="border p-2 text-center w-24">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody id="dataTableBody"></tbody>
@@ -536,6 +539,13 @@
     <!-- SCRIPTS -->
     <script>
         const DUTY_PERIODS = { "GVCN": 4, "Bí thư Đoàn": 6, "Tổ phó": 1, "Tổ trưởng": 3, "PBT Đoàn": 2 };
+        // Số tiết ở trên chỉ là mặc định gợi ý; khi nhập có thể sửa tuỳ ý cho từng giáo viên
+        const DUTY_DEFS = [
+            { key: 'GVCN', label: 'Chủ nhiệm' }, { key: 'Tổ trưởng', label: 'Tổ trưởng' }, { key: 'Tổ phó', label: 'Tổ phó' },
+            { key: 'Bí thư Đoàn', label: 'BT Đoàn' }, { key: 'PBT Đoàn', label: 'PBT Đoàn' }
+        ];
+        let editingId = null;
+        const round1 = n => Math.round((Number(n) || 0) * 10) / 10;
         const DAYS = ['t2', 't3', 't4', 't5', 't6', 't7'];
         const MIN_PERIODS = 4;
         const PERIODS = ['s1', 's2', 's3', 's4', 's5'];
@@ -587,7 +597,7 @@
         function clearAllSystemData() {
             if (confirm("CẢNH BÁO: Hành động này sẽ xóa vĩnh viễn toàn bộ Giáo viên và Thời khóa biểu hiện tại. Bạn có chắc chắn không?")) {
                 try { ['tkb_teachers', 'tkb_schedule', 'tkb_departments'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
-                dbTeachers = []; globalSchedule = []; lastReport = null;
+                dbTeachers = []; globalSchedule = []; lastReport = null; cancelEdit(true);
                 dbDepartments = [...DEFAULT_DEPTS];
                 renderDepartments(); renderTeachersTable(); renderScheduleReport();
                 showToast("Đã dọn dẹp sạch sẽ Hệ thống!", "success");
@@ -645,42 +655,163 @@
             dl.innerHTML = ['Toán', 'Ngữ văn', 'Tiếng Anh', 'Vật lý', 'Hóa học', 'Sinh học', 'HĐTN-HN', 'GD Địa phương'].map(s => `<option value="${s}">`).join('');
             document.body.appendChild(dl);
         }
-        function addTeachingRow() {
+        function addTeachingRow(sub = '', cls = '', prd = 2) {
             const row = document.createElement('div');
             row.className = 'flex gap-2 items-center teaching-row bg-gray-50 p-2 rounded border border-gray-200 mt-2 shadow-sm';
             row.innerHTML = `
                 <input type="text" class="sub-inp w-1/3 border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500" placeholder="Môn" required list="subject-suggestions">
                 <input type="text" class="cls-inp w-1/3 border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500" placeholder="Lớp" required>
-                <input type="number" class="prd-inp w-1/4 border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500" placeholder="Tiết" min="1" value="2" required>
+                <input type="number" class="prd-inp w-1/4 border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500" placeholder="Tiết" min="1" required>
                 <button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded transition"><i class="fa-solid fa-trash"></i></button>`;
+            row.querySelector('.sub-inp').value = sub;
+            row.querySelector('.cls-inp').value = cls;
+            row.querySelector('.prd-inp').value = prd;
             $('teaching_container').appendChild(row);
+        }
+
+        // ----- Kiêm nhiệm: số tiết nhập linh hoạt -----
+        function renderDutyRows() {
+            $('duty_container').innerHTML = DUTY_DEFS.map(d => `
+                <div class="duty-row flex items-center gap-2 text-sm rounded-lg px-2 py-1 hover:bg-gray-50 transition" data-key="${esc(d.key)}">
+                    <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                        <input type="checkbox" name="kiem_nhiem" value="${esc(d.key)}" onchange="syncDutyInputs()">
+                        <span class="truncate">${esc(d.label)}</span>
+                    </label>
+                    <input type="number" class="duty-prd w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center disabled:bg-gray-50 disabled:text-gray-300" min="0.5" max="30" step="0.5" value="${DUTY_PERIODS[d.key] || 1}" disabled title="Số tiết kiêm nhiệm">
+                    <span class="text-xs text-gray-500 w-6">tiết</span>
+                </div>`).join('');
+        }
+        function syncDutyInputs() {
+            document.querySelectorAll('#duty_container .duty-row').forEach(row => {
+                row.querySelector('.duty-prd').disabled = !row.querySelector('input[type=checkbox]').checked;
+            });
+        }
+        function addExtraDutyRow(name = '', prd = 1) {
+            const row = document.createElement('div');
+            row.className = 'duty-extra-row flex gap-2 items-center';
+            row.innerHTML = `
+                <input type="text" class="dx-name flex-1 min-w-0 border border-gray-300 rounded px-2 py-1 text-sm" placeholder="Tên kiêm nhiệm khác">
+                <input type="number" class="dx-prd w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center" min="0.5" max="30" step="0.5" title="Số tiết kiêm nhiệm">
+                <span class="text-xs text-gray-500 w-6">tiết</span>
+                <button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded transition" title="Bỏ kiêm nhiệm này"><i class="fa-solid fa-xmark"></i></button>`;
+            row.querySelector('.dx-name').value = name;
+            row.querySelector('.dx-prd').value = prd;
+            $('duty_extra_container').appendChild(row);
+            if (!name) row.querySelector('.dx-name').focus();
+        }
+        // Gom các kiêm nhiệm đã chọn; trả về danh sách và các mục thiếu số tiết
+        function collectDuties() {
+            const list = [], bad = [], seen = new Set();
+            const push = (name, raw) => {
+                const p = round1(parseFloat(raw));
+                if (!name) return;
+                if (!(p > 0)) { bad.push(name); return; }
+                if (seen.has(name.toLowerCase())) return;
+                seen.add(name.toLowerCase()); list.push({ name, period: p });
+            };
+            document.querySelectorAll('#duty_container .duty-row').forEach(row => {
+                if (row.querySelector('input[type=checkbox]').checked) push(row.dataset.key, row.querySelector('.duty-prd').value);
+            });
+            document.querySelectorAll('#duty_extra_container .duty-extra-row').forEach(row => {
+                push(row.querySelector('.dx-name').value.trim(), row.querySelector('.dx-prd').value);
+            });
+            return { list, bad };
+        }
+
+        // ----- Sửa giáo viên -----
+        function resetTeacherForm() {
+            $('dataForm').reset();
+            $('duty_extra_container').innerHTML = '';
+            $('teaching_container').innerHTML = ''; addTeachingRow();
+            syncDutyInputs();
+        }
+        function setEditUI(on, name) {
+            $('edit-banner').classList.toggle('hidden', !on);
+            if (on) $('edit-name').textContent = name;
+            $('btn-save-label').textContent = on ? 'CẬP NHẬT THAY ĐỔI' : 'LƯU DỮ LIỆU';
+        }
+        function cancelEdit(silent) {
+            editingId = null; resetTeacherForm(); setEditUI(false);
+            if (!silent) renderTeachersTable();
+        }
+        function editTeacher(id) {
+            const t = dbTeachers.find(x => x.id === id); if (!t) return;
+            resetTeacherForm();
+            editingId = id;
+            $('gv_name').value = t.name;
+            const sel = $('gv_dept');
+            if (t.dept && !Array.from(sel.options).some(o => o.value === t.dept)) sel.add(new Option(t.dept, t.dept));
+            sel.value = t.dept;
+            (t.duties || []).forEach(d => {
+                const row = Array.from(document.querySelectorAll('#duty_container .duty-row')).find(r => r.dataset.key === d.name);
+                if (row) { row.querySelector('input[type=checkbox]').checked = true; row.querySelector('.duty-prd').value = d.period; }
+                else addExtraDutyRow(d.name, d.period);
+            });
+            syncDutyInputs();
+            $('teaching_container').innerHTML = '';
+            if ((t.teaching || []).length) t.teaching.forEach(tc => addTeachingRow(tc.sub, tc.cls, tc.prd)); else addTeachingRow();
+            setEditUI(true, t.name);
+            renderTeachersTable();
+            const box = $('view-data-entry'); if (box && box.scrollTo) box.scrollTo({ top: 0, behavior: 'smooth' });
+            $('gv_name').focus();
+        }
+
+        // Đồng bộ TKB hiện có khi sửa phân công: đổi tên GV, gỡ các tiết không còn trong phân công
+        function reconcileSchedule(oldName, t) {
+            if (oldName !== t.name) globalSchedule.forEach(x => { if (x.teacher === oldName) x.teacher = t.name; });
+            const allowed = new Map();
+            (t.teaching || []).forEach(tc => { const k = `${tc.sub}|${tc.cls}`; allowed.set(k, (allowed.get(k) || 0) + (parseInt(tc.prd) || 0)); });
+            const seen = new Map(), drop = new Set();
+            globalSchedule.forEach(x => {
+                if (x.teacher !== t.name) return;
+                const k = `${x.subject}|${x.cls}`, n = (seen.get(k) || 0) + 1; seen.set(k, n);
+                if (n > (allowed.get(k) || 0)) drop.add(x);
+            });
+            if (drop.size) globalSchedule = globalSchedule.filter(x => !drop.has(x));
+            return drop.size;
         }
 
         function saveTeacherData(e) {
             e.preventDefault();
             const name = $('gv_name').value.trim();
-            if (dbTeachers.some(t => t.name.toLowerCase() === name.toLowerCase())) {
+            if (!name) return showToast("Hãy nhập họ tên giáo viên.", "error");
+            if (dbTeachers.some(t => t.id !== editingId && t.name.toLowerCase() === name.toLowerCase())) {
                 return showToast("Đã có giáo viên trùng tên. Hãy thêm ký hiệu phân biệt.", "error");
             }
-            let teachPeriods = 0, dutyPeriods = 0, teaching = [], dutiesList = [];
+            let teachPeriods = 0, teaching = [];
             document.querySelectorAll('.teaching-row').forEach(row => {
                 const sub = row.querySelector('.sub-inp').value.trim();
                 const cls = row.querySelector('.cls-inp').value.trim().toUpperCase();
                 const prd = parseInt(row.querySelector('.prd-inp').value);
                 if (cls && sub && prd > 0) { teaching.push({ sub, cls, prd }); teachPeriods += prd; }
             });
-            Array.from(document.querySelectorAll('input[name="kiem_nhiem"]:checked')).forEach(el => {
-                const p = DUTY_PERIODS[el.value] || 0; dutyPeriods += p; dutiesList.push({ name: el.value, period: p });
-            });
-            dbTeachers.push({ id: Date.now(), name, dept: $('gv_dept').value, duties: dutiesList, teaching, teachPeriods, dutyPeriods, total: teachPeriods + dutyPeriods });
+            const { list: duties, bad } = collectDuties();
+            if (bad.length) return showToast(`Hãy nhập số tiết (lớn hơn 0) cho kiêm nhiệm: ${bad.join(', ')}.`, "error");
+            const dutyPeriods = round1(duties.reduce((a, d) => a + d.period, 0));
+            const total = round1(teachPeriods + dutyPeriods);
+
+            if (editingId !== null) {
+                const t = dbTeachers.find(x => x.id === editingId);
+                if (!t) { cancelEdit(true); return showToast("Không tìm thấy giáo viên cần sửa.", "error"); }
+                const oldName = t.name;
+                Object.assign(t, { name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total });
+                const removed = reconcileSchedule(oldName, t);
+                if (removed) lastReport = null;
+                poolSel = null; freeTeacher = '';
+                saveDataToStorage(); cancelEdit(true); renderTeachersTable(); renderScheduleReport();
+                return showToast(removed ? `Đã cập nhật. ${removed} tiết bị gỡ khỏi TKB vì phân công thay đổi, hãy xếp lại ở mục "Tiết cần xếp".` : "Đã cập nhật thông tin giáo viên!", "success");
+            }
+
+            dbTeachers.push({ id: Date.now(), name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total });
             saveDataToStorage(); renderTeachersTable();
-            e.target.reset(); $('teaching_container').innerHTML = ''; addTeachingRow();
+            resetTeacherForm();
             showToast("Lưu Dữ liệu thành công!", "success");
         }
 
         function deleteTeacher(id) {
             const t = dbTeachers.find(x => x.id === id);
             if (!t) return;
+            if (editingId === id) cancelEdit(true);
             dbTeachers = dbTeachers.filter(x => x.id !== id);
             globalSchedule = globalSchedule.filter(s => s.teacher !== t.name);
             saveDataToStorage(); renderTeachersTable();
@@ -697,12 +828,12 @@
                     const duties = (t.duties || []).map(d => `<span class="bg-yellow-100 text-xs px-2 py-1 border border-yellow-200 rounded mr-1 mb-1 inline-block">${esc(d.name)} <b class="text-blue-600">(+${esc(d.period)})</b></span>`).join('') || '<span class="text-gray-400 italic text-xs">Không có</span>';
                     const teaching = (t.teaching || []).map(tc => `<div class="mb-1 text-xs"><b>${esc(tc.sub)}</b> <i class="fa-solid fa-arrow-right text-[9px] mx-1 text-gray-400"></i> Lớp ${esc(tc.cls)} <span class="text-gray-500">(${esc(tc.prd)}t)</span></div>`).join('') || '<span class="text-gray-400 italic text-xs">Chưa có tiết dạy</span>';
                     return `
-                    <tr class="border-b hover:bg-blue-50 transition">
+                    <tr class="border-b hover:bg-blue-50 transition${t.id === editingId ? ' bg-yellow-50' : ''}">
                         <td class="border p-2"><b>${esc(t.name)}</b><br><span class="text-[11px] text-gray-500">${esc(t.dept)}</span></td>
                         <td class="border p-2 align-top">${duties}</td>
                         <td class="border p-2 align-top">${teaching}</td>
                         <td class="border p-2 text-center"><div class="font-bold text-lg ${colorClass}">${esc(t.total)}</div><div class="text-[10px] text-gray-500 bg-gray-100 rounded px-1 mt-1 inline-block border">Dạy: ${esc(t.teachPeriods)} | KN: ${esc(t.dutyPeriods)}</div></td>
-                        <td class="border p-2 text-center"><button onclick="deleteTeacher(${Number(t.id)})" class="text-red-500 bg-red-50 p-2 rounded hover:bg-red-100"><i class="fa-solid fa-trash"></i></button></td>
+                        <td class="border p-2 text-center whitespace-nowrap"><button onclick="editTeacher(${Number(t.id)})" class="text-blue-600 bg-blue-50 p-2 rounded hover:bg-blue-100 mr-1" title="Sửa phân công, kiêm nhiệm"><i class="fa-solid fa-pen"></i></button><button onclick="deleteTeacher(${Number(t.id)})" class="text-red-500 bg-red-50 p-2 rounded hover:bg-red-100" title="Xóa giáo viên"><i class="fa-solid fa-trash"></i></button></td>
                     </tr>`;
                 }).join('');
             }
@@ -1822,6 +1953,7 @@
         }
 
         function mockData() {
+            cancelEdit(true);
             dbTeachers = [
                 { id: 1, name: "Thầy Toán 1", dept: "Tổ Toán - Tin", duties: [{ name: "GVCN", period: 4 }], teaching: [{ sub: "Toán", cls: "10A1", prd: 4 }, { sub: "Toán", cls: "10A2", prd: 4 }], teachPeriods: 8, dutyPeriods: 4, total: 12 },
                 { id: 2, name: "Cô Văn 1", dept: "Tổ Ngữ văn", duties: [{ name: "Bí thư Đoàn", period: 6 }], teaching: [{ sub: "Ngữ văn", cls: "10A1", prd: 4 }, { sub: "Ngữ văn", cls: "10A2", prd: 4 }, { sub: "HĐTN-HN", cls: "10A1", prd: 2 }], teachPeriods: 10, dutyPeriods: 6, total: 16 },
@@ -1884,6 +2016,7 @@
             loadDataFromStorage();
             ensureSubjectDatalist();
             renderDepartments();
+            renderDutyRows();
             if ($('teaching_container').children.length === 0) addTeachingRow();
             renderTeachersTable();
             renderScheduleReport();
