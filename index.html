@@ -303,6 +303,15 @@
                                 </div>
                             </label>
                         </div>
+                        <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm">
+                            <label class="flex items-start cursor-pointer text-blue-900">
+                                <input type="checkbox" id="ai-compact" checked class="mt-0.5 mr-2 rounded text-blue-600 focus:ring-blue-500">
+                                <div>
+                                    <span class="font-semibold">Xếp gọn thông minh cho giáo viên</span>
+                                    <p class="text-[11px] text-blue-800/80 mt-1 leading-tight">Sau khi xếp, tự dồn tiết dạy của GV vào ít buổi hơn, dạy liên tục, hạn chế buổi chỉ có 1 tiết và trống tiết.</p>
+                                </div>
+                            </label>
+                        </div>
                         <div class="p-3 hover:bg-gray-50 border rounded-lg text-sm transition">
                             <label class="flex items-start cursor-pointer text-gray-800">
                                 <input type="checkbox" id="ai-dayoff" checked class="mt-0.5 mr-2 rounded text-blue-600 focus:ring-blue-500"> 
@@ -328,7 +337,7 @@
                         
                         <div id="ai-progress" class="hidden mt-4 bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-inner">
                             <div class="flex justify-between mb-1 text-xs font-semibold text-blue-700">
-                                <span>AI đang giải thuật toán...</span><span id="ai-percent">0%</span>
+                                <span id="ai-label">AI đang giải thuật toán...</span><span id="ai-percent">0%</span>
                             </div>
                             <div class="w-full bg-gray-200 rounded-full h-2">
                                 <div id="ai-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-200" style="width: 0%"></div>
@@ -345,6 +354,18 @@
                         <p class="mt-2 text-xs text-left leading-relaxed">Tiết nào chưa xếp thì chọn ở mục <b>Tiết cần xếp</b> bên dưới; bảng sẽ cho thấy ô nào giáo viên đang trống. Khi đang kéo một tiết, ô <b class="text-green-600">xanh lá</b> là tiết trống chuyển được, ô <b class="text-violet-600">tím</b> là đổi chỗ được, ô <b class="text-red-500">đỏ</b> là bị trùng GV hoặc lớp.</p>
                         <p class="mt-3 text-[10px] text-green-600 font-bold bg-green-100 rounded px-2 py-1"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Tự động lưu khi kéo thả</p>
                     </div>
+                </div>
+
+                <div class="p-5 border-b" id="compact-panel">
+                    <h3 class="font-bold text-gray-800 mb-2 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-wand-sparkles mr-2"></i>Xếp gọn thông minh</h3>
+                    <p class="text-xs text-gray-600 mb-3 leading-relaxed">Sắp xếp lại các tiết trong từng lớp để giáo viên dạy liên tục, tập trung vào ít buổi, hạn chế buổi chỉ có 1 tiết và trống tiết. Không làm trùng lịch, giữ nguyên số tiết mỗi buổi của lớp. Dùng được cả với TKB xếp tay.</p>
+                    <button type="button" id="btn-compact" onclick="runCompact()" class="btn-cta w-full py-2.5 px-4 rounded-xl font-bold text-sm flex justify-center items-center">
+                        <i class="fa-solid fa-wand-sparkles mr-2"></i><span id="btn-compact-label">Xếp gọn TKB hiện tại</span>
+                    </button>
+                    <button type="button" id="btn-compact-undo" onclick="undoCompact()" class="hidden w-full mt-2 py-2 px-4 rounded-xl text-sm font-semibold text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 transition">
+                        <i class="fa-solid fa-rotate-left mr-1"></i>Hoàn tác lần xếp gọn
+                    </button>
+                    <div id="compact-report" class="hidden mt-3"></div>
                 </div>
 
                 <div class="p-5 border-b" id="session-panel">
@@ -1142,6 +1163,8 @@
             setMode('auto');
             const opts = { dayOff: $('ai-dayoff').checked, noConsec: $('ai-noconsecutive').checked, pack: $('ai-pack').checked };
             opts.tgap = opts.pack && $('ai-tgap').checked;
+            opts.compact = $('ai-compact').checked;
+            $('ai-label').textContent = 'AI đang giải thuật toán...';
             const info = analyzeData(lessons, opts);
             const bar = $('ai-bar'), pct = $('ai-percent');
             isScheduling = true; $('schedule-report').classList.add('hidden');
@@ -1164,6 +1187,20 @@
                     bar.style.width = percent + '%'; pct.innerText = percent + '%';
 
                     if (attempts < MAX_ATTEMPTS && needMore() && elapsed < LIMIT_MS) { setTimeout(step, 0); return; }
+                    if (opts.compact) {
+                        $('ai-label').textContent = 'Đang xếp gọn cho giáo viên...';
+                        setTimeout(() => {
+                            try {
+                                const before = teacherStats(best.lessons);
+                                compactLessons(best.lessons, opts, Math.min(2500, 400 + best.lessons.length * 4));
+                                const after = teacherStats(best.lessons);
+                                best.gap1 = after.gap1; best.gap2 = after.gap2; best.consec = consecCount(best.lessons);
+                                best.compact = { before, after };
+                            } catch (e) { console.error(e); }
+                            finishSchedule(best, info, opts);
+                        }, 40);
+                        return;
+                    }
                     finishSchedule(best, info, opts);
                 } catch (err) {
                     isScheduling = false; setSchedulingUI(false); showToast("Lỗi: " + err.message, "error");
@@ -1176,11 +1213,11 @@
             globalSchedule = best.lessons.filter(l => l.day !== null).map(l => ({
                 id: newCellId(), day: l.day, period: l.period, teacher: l.teacher, subject: l.subject, cls: l.cls, type: l.type
             }));
-            saveDataToStorage();
+            saveDataToStorage(); resetCompactState();
             const missing = new Map();
             best.unplaced.forEach(l => { const k = `${l.teacher}|${l.subject}|${l.cls}`; missing.set(k, (missing.get(k) || 0) + 1); });
             lastReport = {
-                placed: globalSchedule.length, total: best.lessons.length, pack: !!opts.pack, tgap: !!opts.tgap, gap1: best.gap1 || 0, gap2: best.gap2 || 0, consec: opts.noConsec ? best.consec : 0,
+                placed: globalSchedule.length, total: best.lessons.length, pack: !!opts.pack, compact: best.compact || null, tgap: !!opts.tgap, gap1: best.gap1 || 0, gap2: best.gap2 || 0, consec: opts.noConsec ? best.consec : 0,
                 warnings: info.warnings, missing: Array.from(missing.entries()).map(([k, n]) => { const [t, s, c] = k.split('|'); return `${t} - ${s} - Lớp ${c}: thiếu ${n} tiết`; })
             };
             $('ai-bar').style.width = '100%'; $('ai-percent').innerText = '100%'; freeSlotSel = null;
@@ -1200,12 +1237,215 @@
             el.className = `mt-4 text-xs rounded-lg border p-3 leading-relaxed ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`;
             let html = `<div class="font-bold text-sm mb-1">Đã xếp ${r.placed}/${r.total} tiết</div>`;
             if (r.consec > 0) html += `<div class="mb-1">Còn ${r.consec} cặp tiết liền nhau cùng môn.</div>`;
+            if (r.compact) html += `<div class="mb-1">Xếp gọn cho GV: số buổi dạy ${r.compact.before.days} → ${r.compact.after.days}, buổi chỉ 1 tiết ${r.compact.before.one} → ${r.compact.after.one}.</div>`;
             if (r.tgap) html += `<div class="mb-1">GV trống giữa các tiết dạy: ${r.gap1} chỗ trống 1 tiết (cho phép)${r.gap2 > 0 ? `, <b>${r.gap2} chỗ trống từ 2 tiết (chưa đạt)</b>` : ', không có chỗ trống từ 2 tiết'}.</div>`;
             if (r.missing.length) html += `<div class="font-semibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.warnings.length) html += `<div class="font-semibold">Dữ liệu cần kiểm tra:</div><ul class="list-disc pl-4">${r.warnings.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.pack && r.missing.length) html += `<div class="mt-1">Mẹo: GV có quá nhiều tiết trùng khung buổi của các lớp. Hãy giảm tiết dồn vào 1 khối, hoặc bỏ chọn "Gói gọn buổi học" rồi xếp lại.</div>`;
             if (ok) html += `<div>Không có xung đột GV hoặc lớp.</div>`;
             el.innerHTML = html;
+        }
+
+        // ================= XẾP GỌN THÔNG MINH CHO GIÁO VIÊN =================
+        // Hoán đổi tiết trong cùng một lớp (tập ô của lớp không đổi, nên quy tắc buổi học của lớp được giữ nguyên)
+        // để lịch dạy của GV gọn hơn: ít buổi, dạy liên tục, tránh buổi chỉ 1 tiết, tránh trống tiết.
+        const COMPACT_W = { CLASH: 1000, GAP1: 55, GAP2: 300, DAY: 40, ONE: 30, SUBJ: 6, CONSEC: 400 };
+        let compactBusy = false, compactBackup = null, compactAfterJson = '';
+
+        function teacherStats(list) {
+            const masks = new Map();
+            list.forEach(x => {
+                if (x.day == null || x.period == null) return;
+                const k = x.teacher + '\u0001' + x.day;
+                masks.set(k, (masks.get(k) || 0) | (1 << PERIODS.indexOf(x.period)));
+            });
+            let days = 0, one = 0, gap1 = 0, gap2 = 0;
+            masks.forEach(m => {
+                days++;
+                if ((m & (m - 1)) === 0) one++;
+                let first = -1, last = -1;
+                for (let b = 0; b < PERIODS.length; b++) if (m & (1 << b)) { if (first < 0) first = b; last = b; }
+                let run = 0;
+                for (let b = first; b <= last; b++) {
+                    if (m & (1 << b)) { if (run === 1) gap1++; else if (run >= 2) gap2++; run = 0; } else run++;
+                }
+            });
+            return { days, one, gap1, gap2 };
+        }
+        function consecCount(list) {
+            const idx = new Map();
+            list.forEach(x => { if (x.day != null) idx.set(`${x.cls}|${x.day}|${x.period}`, x.subject); });
+            let n = 0;
+            list.forEach(x => {
+                if (x.day == null) return;
+                const pi = PERIODS.indexOf(x.period);
+                if (pi < PERIODS.length - 1 && idx.get(`${x.cls}|${x.day}|${PERIODS[pi + 1]}`) === x.subject) n++;
+            });
+            return n;
+        }
+
+        function compactLessons(list, opts, budgetMs) {
+            const W = COMPACT_W, nP = PERIODS.length, nD = DAYS.length, nS = nP * nD;
+            const items = list.filter(x => x.day != null && x.period != null), nL = items.length;
+            if (nL < 2) return { swaps: 0 };
+            const tIdx = new Map(), cIdx = new Map(), sIdx = new Map();
+            items.forEach(x => {
+                if (!tIdx.has(x.teacher)) tIdx.set(x.teacher, tIdx.size);
+                if (!cIdx.has(x.cls)) cIdx.set(x.cls, cIdx.size);
+                if (!sIdx.has(x.subject)) sIdx.set(x.subject, sIdx.size);
+            });
+            const nT = tIdx.size, nC = cIdx.size, nSub = sIdx.size;
+            const lt = items.map(x => tIdx.get(x.teacher)), lc = items.map(x => cIdx.get(x.cls)), ls = items.map(x => sIdx.get(x.subject));
+            const slotOf = new Int16Array(nL).fill(-1), tOcc = new Int16Array(nT * nS), tMask = new Uint8Array(nT * nD);
+            const subjDay = new Int16Array(nC * nSub * nD), cSlot = new Int16Array(nC * nS).fill(-1);
+
+            // Chi phí của 1 GV trong 1 buổi theo mặt nạ các tiết dạy: số buổi, buổi chỉ 1 tiết, trống 1 tiết, trống từ 2 tiết
+            const dayTable = new Int16Array(1 << nP);
+            for (let m = 1; m < (1 << nP); m++) {
+                let first = -1, last = -1, cnt = 0;
+                for (let b = 0; b < nP; b++) if (m & (1 << b)) { if (first < 0) first = b; last = b; cnt++; }
+                let c = W.DAY + (cnt === 1 ? W.ONE : 0), run = 0;
+                for (let b = first; b <= last; b++) {
+                    if (m & (1 << b)) { if (run === 1) c += W.GAP1; else if (run >= 2) c += W.GAP2 + 60 * run; run = 0; } else run++;
+                }
+                dayTable[m] = c;
+            }
+
+            const add = (i, sl) => { slotOf[i] = sl; const d = (sl / nP) | 0; if (++tOcc[lt[i] * nS + sl] === 1) tMask[lt[i] * nD + d] |= 1 << (sl % nP); subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + sl] = i; };
+            const del = (i) => { const sl = slotOf[i], d = (sl / nP) | 0; if (--tOcc[lt[i] * nS + sl] === 0) tMask[lt[i] * nD + d] &= ~(1 << (sl % nP)); subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + sl] = -1; slotOf[i] = -1; };
+            const adj = (i, sl) => {
+                if (!opts.noConsec) return 0;
+                const p = sl % nP; let c = 0;
+                if (p > 0) { const o = cSlot[lc[i] * nS + sl - 1]; if (o >= 0 && ls[o] === ls[i]) c += W.CONSEC; }
+                if (p < nP - 1) { const o = cSlot[lc[i] * nS + sl + 1]; if (o >= 0 && ls[o] === ls[i]) c += W.CONSEC; }
+                return c;
+            };
+            const costAt = (i, sl) => {
+                const d = (sl / nP) | 0, m = tMask[lt[i] * nD + d], bit = 1 << (sl % nP);
+                let c = W.CLASH * tOcc[lt[i] * nS + sl] + W.SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + adj(i, sl);
+                if (!(m & bit)) c += dayTable[m | bit] - dayTable[m];
+                return c;
+            };
+            const deltaSwap = (a, b) => {
+                const sa = slotOf[a], sb = slotOf[b];
+                del(a); del(b);
+                let before = costAt(a, sa); add(a, sa); before += costAt(b, sb); del(a);
+                let after = costAt(a, sb); add(a, sb); after += costAt(b, sa); del(a);
+                add(a, sa); add(b, sb);
+                return after - before;
+            };
+            const applySwap = (a, b) => { const sa = slotOf[a], sb = slotOf[b]; del(a); del(b); add(a, sb); add(b, sa); };
+
+            items.forEach((x, i) => add(i, DAYS.indexOf(x.day) * nP + PERIODS.indexOf(x.period)));
+            const byCls = Array.from({ length: nC }, () => []); items.forEach((_, i) => byCls[lc[i]].push(i));
+
+            // Luyện kim mô phỏng: nhiệt độ giảm dần, luôn nhớ trạng thái tốt nhất
+            let rel = 0, bestRel = 0, swaps = 0; const snap = slotOf.slice();
+            const t0 = performance.now(), T0 = 40, T1 = 0.6;
+            for (;;) {
+                const el = performance.now() - t0; if (el > budgetMs) break;
+                const T = T0 * Math.pow(T1 / T0, el / budgetMs);
+                for (let k = 0; k < 250; k++) {
+                    const a = (Math.random() * nL) | 0, mates = byCls[lc[a]];
+                    if (mates.length < 2) continue;
+                    const b = mates[(Math.random() * mates.length) | 0]; if (b === a) continue;
+                    const d = deltaSwap(a, b);
+                    if (d >= W.CLASH / 2) continue;
+                    if (d <= 0 || Math.random() < Math.exp(-d / T)) {
+                        applySwap(a, b); rel += d; swaps++;
+                        if (rel < bestRel - 1e-9) { bestRel = rel; snap.set(slotOf); }
+                    }
+                }
+            }
+            if (rel > bestRel + 1e-9) { for (let i = 0; i < nL; i++) del(i); for (let i = 0; i < nL; i++) add(i, snap[i]); }
+
+            // Vòng cuối: chỉ nhận hoán đổi có lợi cho đến khi không còn cải thiện
+            for (let pass = 0, improved = true; improved && pass < 8; pass++) {
+                improved = false;
+                for (let a = 0; a < nL; a++) {
+                    const mates = byCls[lc[a]];
+                    for (const b of mates) { if (b <= a) continue; if (deltaSwap(a, b) < -1e-9) { applySwap(a, b); improved = true; } }
+                }
+            }
+            items.forEach((x, i) => { x.day = DAYS[(slotOf[i] / nP) | 0]; x.period = PERIODS[slotOf[i] % nP]; });
+            return { swaps };
+        }
+
+        // Kiểm tra an toàn: không trùng GV/lớp và mỗi lớp vẫn chiếm đúng các ô cũ
+        function sameStructure(before, after) {
+            if (before.length !== after.length) return false;
+            const seenT = new Set(), seenC = new Set(), cellsB = new Set(), cellsA = new Set();
+            for (let i = 0; i < after.length; i++) {
+                const a = after[i], b = before[i];
+                if (a.id !== b.id || a.teacher !== b.teacher || a.subject !== b.subject || a.cls !== b.cls) return false;
+                const kt = `${a.teacher}|${a.day}|${a.period}`, kc = `${a.cls}|${a.day}|${a.period}`;
+                if (seenT.has(kt) || seenC.has(kc)) return false;
+                seenT.add(kt); seenC.add(kc); cellsA.add(kc); cellsB.add(`${b.cls}|${b.day}|${b.period}`);
+            }
+            if (cellsA.size !== cellsB.size) return false;
+            for (const c of cellsB) if (!cellsA.has(c)) return false;
+            return true;
+        }
+
+        function syncReportWithSchedule() {
+            if (!lastReport) return;
+            const st = teacherStats(globalSchedule);
+            lastReport.gap1 = st.gap1; lastReport.gap2 = st.gap2;
+            lastReport.consec = $('ai-noconsecutive').checked ? consecCount(globalSchedule) : 0;
+        }
+        function resetCompactState() {
+            compactBackup = null; compactAfterJson = '';
+            if ($('btn-compact-undo')) $('btn-compact-undo').classList.add('hidden');
+            if ($('compact-report')) { $('compact-report').classList.add('hidden'); $('compact-report').innerHTML = ''; }
+        }
+        function setCompactBusy(on) {
+            compactBusy = on; $('btn-compact').disabled = on;
+            $('btn-compact-label').textContent = on ? 'Đang xếp gọn...' : 'Xếp gọn TKB hiện tại';
+        }
+        function renderCompactReport(before, after) {
+            const row = (label, a, b) => {
+                const better = b < a, same = b === a;
+                return `<div class="flex items-center justify-between gap-2 py-1 border-b border-green-100 last:border-0"><span>${label}</span><span class="font-bold whitespace-nowrap ${better ? 'text-green-700' : same ? 'text-gray-500' : 'text-red-600'}">${a} <i class="fa-solid fa-arrow-right text-[9px] mx-0.5"></i> ${b}</span></div>`;
+            };
+            const el = $('compact-report');
+            const improved = after.days < before.days || after.one < before.one || after.gap1 < before.gap1 || after.gap2 < before.gap2;
+            el.innerHTML = `<div class="text-xs rounded-lg border ${improved ? 'border-green-200 bg-green-50 text-green-900' : 'border-gray-200 bg-gray-50 text-gray-700'} p-2 leading-relaxed">
+                <div class="font-bold mb-1">${improved ? '<i class="fa-solid fa-circle-check mr-1"></i>Đã xếp gọn' : 'TKB đã khá gọn, ít thay đổi'}</div>
+                ${row('Số buổi dạy của GV (trong tuần)', before.days, after.days)}
+                ${row('Buổi GV chỉ dạy 1 tiết', before.one, after.one)}
+                ${row('Chỗ GV trống 1 tiết giữa các tiết dạy', before.gap1, after.gap1)}
+                ${row('Chỗ GV trống từ 2 tiết liền', before.gap2, after.gap2)}
+            </div>`;
+            el.classList.remove('hidden');
+        }
+
+        function runCompact() {
+            if (compactBusy || isScheduling) return;
+            if (!globalSchedule.length) return showToast("Chưa có TKB để xếp gọn. Hãy xếp tự động hoặc xếp thủ công trước.", "error");
+            setCompactBusy(true);
+            setTimeout(() => {
+                try {
+                    const backup = globalSchedule.map(x => ({ ...x })), work = globalSchedule.map(x => ({ ...x }));
+                    const before = teacherStats(backup);
+                    compactLessons(work, { noConsec: $('ai-noconsecutive').checked }, Math.min(3000, 500 + work.length * 5));
+                    if (!sameStructure(backup, work)) throw new Error("kết quả không hợp lệ nên TKB được giữ nguyên");
+                    const after = teacherStats(work);
+                    globalSchedule = work; compactBackup = backup; compactAfterJson = JSON.stringify(work);
+                    syncReportWithSchedule(); saveDataToStorage(); poolSel = null; freeSlotSel = null;
+                    renderTimetable(); renderScheduleReport(); renderDataSummary();
+                    renderCompactReport(before, after); $('btn-compact-undo').classList.remove('hidden');
+                    showToast(after.days < before.days || after.one < before.one || after.gap1 < before.gap1 || after.gap2 < before.gap2 ? "Đã xếp gọn lịch dạy của giáo viên!" : "TKB đã khá gọn, gần như không cần thay đổi.", "success");
+                } catch (err) { showToast("Không xếp gọn được: " + err.message, "error"); }
+                setCompactBusy(false);
+            }, 60);
+        }
+        function undoCompact() {
+            if (!compactBackup) return;
+            if (JSON.stringify(globalSchedule) !== compactAfterJson && !confirm("Bạn đã chỉnh sửa TKB sau lần xếp gọn. Hoàn tác sẽ mất các chỉnh sửa đó. Tiếp tục?")) return;
+            globalSchedule = compactBackup; resetCompactState();
+            syncReportWithSchedule(); saveDataToStorage(); poolSel = null; freeSlotSel = null;
+            renderTimetable(); renderScheduleReport(); renderDataSummary();
+            showToast("Đã hoàn tác lần xếp gọn.", "success");
         }
 
         // Kiểm tra quy tắc buổi học trên TKB hiện có (dùng cho cả xếp tự động lẫn thủ công)
@@ -1280,7 +1520,7 @@
 
         function clearTimetable() {
             if (confirm("Bạn có chắc muốn xóa sạch Bảng TKB hiện tại?")) {
-                globalSchedule = []; lastReport = null; saveDataToStorage();
+                globalSchedule = []; lastReport = null; saveDataToStorage(); resetCompactState();
                 renderScheduleReport(); renderDataSummary(); renderTimetable(); showToast("Đã xóa trắng", "success");
             }
         }
