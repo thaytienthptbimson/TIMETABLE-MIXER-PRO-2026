@@ -132,6 +132,9 @@
         .t-chip.is-active b { background: rgba(255,255,255,.25); color: #fff; }
         .t-chip.is-full { border-color: #ffc9d3; color: var(--bad-ink); }
         .t-chip.is-full b { background: var(--bad-soft); color: var(--bad-ink); }
+        .cap-off { background-image: repeating-linear-gradient(135deg, #eef0f6 0, #eef0f6 6px, #f8f9fd 6px, #f8f9fd 12px); }
+        .cap-off-label { font-size: 10px; color: #9aa3bb; text-align: center; padding-top: 10px; font-weight: 600; }
+        .cap-viol { box-shadow: inset 0 0 0 2px var(--bad); }
         .hole-cell { background-image: repeating-linear-gradient(135deg, #ffe2e7 0, #ffe2e7 5px, #ffffff 5px, #ffffff 10px); }
     </style>
 </head>
@@ -226,6 +229,12 @@
                     <div class="flex gap-2 items-center flex-wrap justify-end">
                         <button onclick="scheduleFromData()" id="btn-schedule-from-data" class="btn-cta text-sm px-4 py-2 rounded-lg font-bold">
                             <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Xếp TKB từ dữ liệu này
+                        </button>
+                        <button onclick="openImportModal()" class="text-sm bg-white text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition font-medium shadow-sm" title="Nhập danh sách giáo viên và phân công từ file Excel">
+                            <i class="fa-solid fa-file-import mr-1"></i>Nhập Excel
+                        </button>
+                        <button onclick="exportTeachersXlsx()" class="text-sm bg-white text-green-700 border border-green-300 px-3 py-1.5 rounded-lg hover:bg-green-50 transition font-medium shadow-sm" title="Xuất dữ liệu giáo viên ra file Excel">
+                            <i class="fa-solid fa-file-excel mr-1"></i>Xuất Excel
                         </button>
                         <button onclick="mockData()" class="text-sm bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded hover:bg-purple-200 transition font-medium shadow-sm">
                             <i class="fa-solid fa-vial mr-1"></i>Tạo 4 GV Mẫu
@@ -354,6 +363,14 @@
                         <p class="mt-2 text-xs text-left leading-relaxed">Tiết nào chưa xếp thì chọn ở mục <b>Tiết cần xếp</b> bên dưới; bảng sẽ cho thấy ô nào giáo viên đang trống. Khi đang kéo một tiết, ô <b class="text-green-600">xanh lá</b> là tiết trống chuyển được, ô <b class="text-violet-600">tím</b> là đổi chỗ được, ô <b class="text-red-500">đỏ</b> là bị trùng GV hoặc lớp.</p>
                         <p class="mt-3 text-[10px] text-green-600 font-bold bg-green-100 rounded px-2 py-1"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Tự động lưu khi kéo thả</p>
                     </div>
+                </div>
+
+                <div class="p-5 border-b" id="daycap-panel">
+                    <h3 class="font-bold text-gray-800 mb-2 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-calendar-day mr-2"></i>Số tiết tối đa theo ngày</h3>
+                    <div id="daycap-grid" class="grid grid-cols-6 gap-1.5"></div>
+                    <button type="button" onclick="setMondayCap(4)" class="mt-3 w-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg py-1.5 hover:bg-blue-100 transition"><i class="fa-solid fa-thumbtack mr-1"></i>Ấn định Thứ 2 tối đa 4 tiết</button>
+                    <p class="text-[11px] text-gray-500 mt-2 leading-snug">Ô vượt mức bị khóa (không xếp được). Áp dụng cho xếp tự động, xếp thủ công và kiểm tra. Chọn 5 để bỏ giới hạn.</p>
+                    <div id="daycap-note" class="hidden mt-2 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-2 leading-relaxed"></div>
                 </div>
 
                 <div class="p-5 border-b" id="compact-panel">
@@ -515,6 +532,35 @@
         </div>
     </div>
 
+    <!-- HỘP THOẠI NHẬP EXCEL DỮ LIỆU GIÁO VIÊN -->
+    <div id="import-modal" class="view-hidden fixed inset-0 z-40 items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="import-title" onclick="if (event.target === this) closeImportModal()">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-full flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b shrink-0">
+                <h3 id="import-title" class="text-lg font-bold text-gray-800"><i class="fa-solid fa-file-import mr-2 text-blue-600"></i>Nhập dữ liệu giáo viên từ Excel</h3>
+                <button type="button" onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600" aria-label="Đóng"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-5 overflow-auto flex-1 space-y-4">
+                <div id="import-drop" class="rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 p-5 text-center" ondragover="event.preventDefault(); this.classList.add('bg-blue-100')" ondragleave="this.classList.remove('bg-blue-100')" ondrop="event.preventDefault(); this.classList.remove('bg-blue-100'); onImportFile(event.dataTransfer.files[0])">
+                    <input type="file" id="import-file" accept=".xlsx,.csv" class="hidden" onchange="onImportFile(this.files[0])">
+                    <button type="button" onclick="document.getElementById('import-file').click()" class="btn-cta px-5 py-2.5 rounded-xl font-bold text-sm"><i class="fa-solid fa-folder-open mr-2"></i>Chọn file Excel (.xlsx) hoặc CSV</button>
+                    <p class="text-xs text-gray-500 mt-3 leading-relaxed">Hoặc kéo thả file vào khung này. Mỗi dòng là một phân công: <b>Họ và tên, Tổ chuyên môn, Kiêm nhiệm, Môn, Lớp, Số tiết</b>.<br>Một giáo viên dạy nhiều lớp thì viết nhiều dòng (để trống ô tên ở các dòng sau cũng được).</p>
+                    <button type="button" onclick="downloadTeacherTemplate()" class="mt-2 text-xs font-semibold text-blue-700 hover:underline"><i class="fa-solid fa-download mr-1"></i>Tải file Excel mẫu</button>
+                </div>
+                <div id="import-result" class="hidden"></div>
+            </div>
+            <div class="p-4 border-t flex items-center justify-between gap-3 shrink-0 flex-wrap">
+                <fieldset id="import-mode" class="hidden text-sm space-y-1">
+                    <label class="flex items-start gap-2 cursor-pointer"><input type="radio" name="import-mode" value="merge" checked onchange="renderImportResult()" class="mt-1"><span><b>Thêm mới và cập nhật</b> (GV trùng tên được cập nhật, GV khác giữ nguyên)</span></label>
+                    <label class="flex items-start gap-2 cursor-pointer"><input type="radio" name="import-mode" value="replace" onchange="renderImportResult()" class="mt-1"><span><b>Thay thế toàn bộ</b> danh sách giáo viên bằng nội dung file</span></label>
+                </fieldset>
+                <div class="flex gap-2 ml-auto">
+                    <button type="button" onclick="closeImportModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 transition">Đóng</button>
+                    <button type="button" id="btn-import-apply" onclick="applyImportFromModal()" disabled class="btn-cta px-5 py-2 rounded-lg text-sm font-bold"><i class="fa-solid fa-check mr-1"></i>Nhập dữ liệu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- HỘP THOẠI TIẾT TRỐNG TOÀN BỘ GV -->
     <div id="free-modal" class="view-hidden fixed inset-0 z-40 items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="free-title" onclick="if (event.target === this) closeFreeModal()">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-full flex flex-col">
@@ -570,6 +616,16 @@
         const DAYS = ['t2', 't3', 't4', 't5', 't6', 't7'];
         const MIN_PERIODS = 4;
         const PERIODS = ['s1', 's2', 's3', 's4', 's5'];
+        // Số tiết tối đa mỗi ngày. Mặc định ấn định Thứ 2 tối đa 4 tiết (các ngày khác tối đa 5 tiết), có thể đổi ở mục "Số tiết tối đa theo ngày"
+        const DEFAULT_DAY_CAPS = { t2: 4 };
+        let dayCaps = { ...DEFAULT_DAY_CAPS };
+        function getDayCap(d) { const v = parseInt(dayCaps[d]); return v >= 1 && v <= PERIODS.length ? v : PERIODS.length; }
+        function slotAllowed(d, p) { return PERIODS.indexOf(p) < getDayCap(d); }
+        function slotCount() { return DAYS.reduce((a, d) => a + getDayCap(d), 0); }
+        function loadDayCaps() {
+            try { const raw = localStorage.getItem('tkb_daycaps'); dayCaps = raw ? JSON.parse(raw) : { ...DEFAULT_DAY_CAPS }; } catch (e) { dayCaps = { ...DEFAULT_DAY_CAPS }; }
+        }
+        function saveDayCaps() { try { localStorage.setItem('tkb_daycaps', JSON.stringify(dayCaps)); } catch (e) {} }
         const DEFAULT_DEPTS = ['Tổ Toán - Tin', 'Tổ Ngữ văn', 'Tổ Ngoại ngữ', 'Tổ Lý - Hóa - Sinh'];
 
         let dbTeachers = [];
@@ -902,15 +958,32 @@
 
         // Chia số tiết/tuần của lớp thành các buổi 4-5 tiết, mỗi buổi xếp liền từ tiết 1
         function gradePattern(total) {
-            const nd = DAYS.length, maxP = PERIODS.length;
-            if (total >= nd * maxP) return { counts: DAYS.map(() => maxP), ok: true, days: nd };
-            let k = 0;
-            for (let c = nd; c >= 1; c--) if (MIN_PERIODS * c <= total && total <= maxP * c) { k = c; break; }
-            const ok = k > 0;
-            if (!k) k = Math.min(nd, Math.max(1, Math.ceil(total / maxP)));
-            const base = Math.floor(total / k), extra = total - base * k, counts = DAYS.map(() => 0);
-            for (let i = 0; i < k; i++) counts[Math.floor(i * nd / k)] = base + (i < extra ? 1 : 0);
-            return { counts, ok, days: k };
+            const nd = DAYS.length, caps = DAYS.map(getDayCap), mins = caps.map(c => Math.min(MIN_PERIODS, c));
+            const sumCaps = caps.reduce((a, b) => a + b, 0);
+            if (total >= sumCaps) return { counts: caps.slice(), ok: true, days: nd };
+            const spread = k => Array.from({ length: k }, (_, i) => Math.floor(i * nd / k));
+            const roomy = k => caps.map((c, i) => i).sort((x, y) => caps[y] - caps[x] || x - y).slice(0, k).sort((x, y) => x - y);
+            let chosen = null;
+            for (let k = nd; k >= 1 && !chosen; k--) {
+                for (const idx of [spread(k), roomy(k)]) {
+                    const lo = idx.reduce((a, i) => a + mins[i], 0), hi = idx.reduce((a, i) => a + caps[i], 0);
+                    if (lo <= total && total <= hi) { chosen = idx; break; }
+                }
+            }
+            const counts = DAYS.map(() => 0), ok = !!chosen;
+            if (chosen) {
+                chosen.forEach(i => { counts[i] = mins[i]; });
+                let extra = total - chosen.reduce((a, i) => a + mins[i], 0);
+                for (const i of chosen) { const add = Math.min(extra, caps[i] - mins[i]); counts[i] += add; extra -= add; }
+            } else {
+                // Không chia được thành các buổi đủ tối thiểu: dùng ít buổi nhất đủ chứa rồi chia đều
+                const order = caps.map((c, i) => i).sort((x, y) => caps[y] - caps[x] || x - y);
+                let k = 0, room = 0; while (k < nd && room < total) room += caps[order[k++]];
+                const idx = order.slice(0, Math.max(1, k)).sort((x, y) => x - y);
+                let left = total;
+                while (left > 0) { let moved = false; for (const i of idx) { if (left > 0 && counts[i] < caps[i]) { counts[i]++; left--; moved = true; } } if (!moved) break; }
+            }
+            return { counts, ok, days: counts.filter(c => c > 0).length };
         }
 
         // Mỗi khối dùng chung 1 khung số tiết theo ngày; trả về các ô được phép của từng lớp
@@ -933,7 +1006,7 @@
         }
 
         function analyzeData(lessons, opts) {
-            const cap = DAYS.length * PERIODS.length;
+            const cap = slotCount();
             const cls = new Map(), tch = new Map(), warnings = [];
             lessons.forEach(l => { cls.set(l.cls, (cls.get(l.cls) || 0) + 1); tch.set(l.teacher, (tch.get(l.teacher) || 0) + 1); });
             cls.forEach((n, c) => { if (n > cap) warnings.push(`Lớp ${c} có ${n} tiết/tuần, nhiều hơn ${cap} ô của lưới.`); });
@@ -1091,7 +1164,7 @@
                 bump(teacherDay, `${L.teacher}|${L.day}`, -1); bump(classDay, `${L.cls}|${L.day}`, -1); bump(subjDay, `${L.cls}|${L.subject}|${L.day}`, -1);
                 L.day = null; L.period = null;
             };
-            const isFree = (L, d, p, ignoreOff) => (ignoreOff || d !== dayOff.get(L.teacher)) && !tSlot.has(key(L.teacher, d, p)) && !cSlot.has(key(L.cls, d, p));
+            const isFree = (L, d, p, ignoreOff) => slotAllowed(d, p) && (ignoreOff || d !== dayOff.get(L.teacher)) && !tSlot.has(key(L.teacher, d, p)) && !cSlot.has(key(L.cls, d, p));
 
             const adjacentSame = (L, d, p) => {
                 const i = PERIODS.indexOf(p);
@@ -1118,7 +1191,7 @@
                 if (best) place(L, best[0], best[1]); else pending.push(L);
             }
 
-            const allSlots = () => shuffle(DAYS.flatMap(d => PERIODS.map(p => [d, p])));
+            const allSlots = () => shuffle(DAYS.flatMap(d => PERIODS.filter(p => slotAllowed(d, p)).map(p => [d, p])));
             const tryRepair = (L) => {
                 for (const [d, p] of allSlots()) if (isFree(L, d, p, true)) { place(L, d, p); return true; }
                 for (const [d, p] of allSlots()) {
@@ -1153,6 +1226,31 @@
             $('ai-progress').classList.toggle('hidden', !busy);
             if ($('btn-schedule-from-data')) $('btn-schedule-from-data').disabled = busy;
         }
+
+        // ----- Số tiết tối đa theo ngày -----
+        function renderDayCapPanel() {
+            const g = $('daycap-grid'); if (!g) return;
+            const opts = Array.from({ length: PERIODS.length - 2 }, (_, i) => PERIODS.length - i);
+            g.innerHTML = DAYS.map(d => {
+                const cap = getDayCap(d), limited = cap < PERIODS.length;
+                return `<div class="text-center"><div class="text-[11px] font-semibold ${d === 't2' ? 'text-blue-700' : 'text-gray-500'}">T${d.slice(1)}</div><select class="w-full rounded-md py-1 text-sm text-center bg-white border ${limited ? 'border-blue-400 font-bold text-blue-700' : 'border-gray-300'}" title="Thứ ${d.slice(1)}: tối đa ${cap} tiết" onchange="onDayCapChange('${d}', this.value)">${opts.map(n => `<option value="${n}"${cap === n ? ' selected' : ''}>${n}</option>`).join('')}</select></div>`;
+            }).join('');
+        }
+        const capViolations = () => globalSchedule.filter(x => !slotAllowed(x.day, x.period));
+        function renderDayCapNote() {
+            const el = $('daycap-note'); if (!el) return;
+            const v = capViolations();
+            if (!v.length) { el.classList.add('hidden'); return; }
+            el.innerHTML = `<b>${v.length} tiết</b> đang nằm ngoài mức tối đa theo ngày (ô viền đỏ). Hãy xếp lại TKB tự động hoặc kéo các tiết này sang ô khác.`;
+            el.classList.remove('hidden');
+        }
+        function afterDayCapChange() {
+            saveDayCaps(); renderDayCapPanel(); renderTimetable(); renderDataSummary();
+            const n = capViolations().length;
+            showToast(n ? `Đã áp dụng. Có ${n} tiết đang nằm ngoài mức tối đa, hãy xếp lại TKB hoặc chuyển các tiết đó.` : "Đã áp dụng số tiết tối đa theo ngày.", n ? "error" : "success");
+        }
+        function onDayCapChange(d, v) { dayCaps[d] = parseInt(v, 10); afterDayCapChange(); }
+        function setMondayCap(n) { dayCaps.t2 = n; afterDayCapChange(); }
 
         function runAutoSchedule() {
             if (isScheduling) return;
@@ -1452,6 +1550,7 @@
         function checkSessionRules() {
             const has = new Set(globalSchedule.map(x => `${x.cls}|${x.day}|${x.period}`));
             const classes = listEntities('class'), stat = new Map(), issues = [];
+            globalSchedule.forEach(x => { if (!slotAllowed(x.day, x.period)) issues.push({ cls: x.cls, text: `Lớp ${x.cls} - Thứ ${x.day.slice(1)}: có tiết ${x.period.slice(1)} vượt mức tối đa ${getDayCap(x.day)} tiết/ngày.` }); });
             classes.forEach(c => DAYS.forEach(d => {
                 const used = PERIODS.map(p => has.has(`${c}|${d}|${p}`));
                 const n = used.filter(Boolean).length, last = used.lastIndexOf(true), holes = [], problems = [];
@@ -1532,7 +1631,7 @@
             const selectedVal = sel.value;
             $('lbl-current-class').innerText = selectedVal ? (viewType === 'class' ? `Lớp ${selectedVal}` : `Giáo viên: ${selectedVal}`) : "Chưa chọn dữ liệu";
             const tbody = $('tkb-body'), hasData = buildLessons().length > 0;
-            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel(); renderTeacherChips();
+            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel(); renderTeacherChips(); renderDayCapNote();
             const sess = globalSchedule.length ? checkSessionRules() : null; renderSessionPanel(sess);
 
             if (!hasData) {
@@ -1551,18 +1650,20 @@
                 html += `<td class="w-16 min-w-[64px] border-b border-r bg-gray-50 sticky-col font-medium shadow-[1px_0_0_#e3e7f1]" style="left:64px;">Tiết ${i}</td>`;
                 DAYS.forEach(day => {
                     const cellData = selectedVal ? globalSchedule.find(s => (viewType === 'class' ? s.cls === selectedVal : s.teacher === selectedVal) && s.day === day && s.period === `s${i}`) : null;
-                    const ec = cellData ? null : emptyCell(viewType, selectedVal, day, `s${i}`);
+                    const capOff = !slotAllowed(day, `s${i}`);
+                    const ec = (cellData || capOff) ? null : emptyCell(viewType, selectedVal, day, `s${i}`);
                     const hst = (sess && viewType === 'class' && selectedVal) ? sess.stat.get(`${selectedVal}|${day}`) : null;
                     const tst = (sess && viewType === 'teacher' && selectedVal) ? sess.tstat.get(`${selectedVal}|${day}`) : null;
-                    const isHole = !cellData && ((!!hst && hst.holes.includes(i - 1)) || (!!tst && tst.long.has(i - 1)));
-                    const isGap1 = !cellData && !!tst && tst.single.has(i - 1);
-                    html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]${ec ? ec.cls : ''}${isHole ? ' hole-cell' : ''}" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
+                    const isHole = !cellData && !capOff && ((!!hst && hst.holes.includes(i - 1)) || (!!tst && tst.long.has(i - 1)));
+                    const isGap1 = !cellData && !capOff && !!tst && tst.single.has(i - 1);
+                    html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]${ec ? ec.cls : ''}${isHole ? ' hole-cell' : ''}${capOff ? (cellData ? ' cap-viol' : ' cap-off') : ''}" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
                     if (cellData) {
                         const bgClass = cellData.type === 'hdtn' ? 'bg-subject-hdtn' : 'bg-subject-normal';
                         const bottomText = viewType === 'class' ? `<i class="fa-solid fa-user-tie mr-1"></i>${esc(cellData.teacher)}` : `<i class="fa-solid fa-users mr-1"></i>Lớp ${esc(cellData.cls)}`;
                         html += `<div id="${esc(cellData.id)}" class="draggable ${bgClass} rounded p-2 text-left h-full shadow-sm hover:shadow transition border border-transparent hover:border-blue-300" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)"><div class="font-bold text-gray-800 text-xs truncate" title="${esc(cellData.subject)}">${esc(cellData.subject)}</div><div class="text-[11px] text-gray-600 mt-1 truncate">${bottomText}</div><button type="button" class="unplace-btn" title="Gỡ tiết này về danh sách chưa xếp" onclick="event.stopPropagation(); unplaceLesson('${esc(cellData.id)}')"><i class="fa-solid fa-xmark"></i></button></div>`;
                     } else {
-                        html += (isHole ? `<div class="text-[10px] font-bold text-red-600 text-center mb-0.5">${viewType === 'teacher' ? 'GV trống giữa buổi' : 'Trống giữa buổi'}</div>` : isGap1 ? `<div class="text-[10px] font-semibold text-amber-600 text-center mb-0.5">Trống 1 tiết</div>` : '') + (ec ? ec.html : '');
+                        if (capOff) html += `<div class="cap-off-label" title="Thứ ${day.slice(1)} chỉ xếp tối đa ${getDayCap(day)} tiết">Không xếp</div>`;
+                        else html += (isHole ? `<div class="text-[10px] font-bold text-red-600 text-center mb-0.5">${viewType === 'teacher' ? 'GV trống giữa buổi' : 'Trống giữa buổi'}</div>` : isGap1 ? `<div class="text-[10px] font-semibold text-amber-600 text-center mb-0.5">Trống 1 tiết</div>` : '') + (ec ? ec.html : '');
                     }
                     html += `</td>`;
                 });
@@ -1595,6 +1696,8 @@
             const viewType = $('view-type').value, sel = $('main-filter').value;
             const inView = s => viewType === 'class' ? s.cls === sel : s.teacher === sel;
             const E = globalSchedule.find(s => s.id !== D.id && inView(s) && s.day === td && s.period === tp) || null;
+            if (!slotAllowed(td, tp)) return { ok: false, E, msg: `Thứ ${td.slice(1)} chỉ xếp tối đa ${getDayCap(td)} tiết.` };
+            if (E && !slotAllowed(D.day, D.period)) return { ok: false, E, msg: `Thứ ${D.day.slice(1)} chỉ xếp tối đa ${getDayCap(D.day)} tiết nên không đổi chỗ vào ô đó được.` };
             const ignore = new Set([D.id]); if (E) ignore.add(E.id);
             const clash = (L, d, p) => globalSchedule.find(s => !ignore.has(s.id) && s.day === d && s.period === p && (s.teacher === L.teacher || s.cls === L.cls));
             const why = (c, L) => c.teacher === L.teacher ? `GV ${L.teacher} đang dạy ${c.subject} lớp ${c.cls}` : `Lớp ${L.cls} đang học ${c.subject} với ${c.teacher}`;
@@ -1679,6 +1782,7 @@
             if (poolSel && !poolList.some(e => e.key === poolSel)) poolSel = null;
         }
         function placeConflict(e, d, p) {
+            if (!slotAllowed(d, p)) return { kind: 'cap', s: null };
             const t = tBusyIdx.get(`${e.teacher}|${d}|${p}`), c = cBusyIdx.get(`${e.cls}|${d}|${p}`);
             return t ? { kind: 'teacher', s: t } : c ? { kind: 'class', s: c } : null;
         }
@@ -1751,12 +1855,12 @@
             head.innerHTML = left ? `${esc(who)}: còn <b class="text-amber-700">${left}</b> tiết chưa xếp.` : `${esc(who)}: đã xếp đủ tiết.`;
             el.innerHTML = poolList.map((e, i) => {
                 const can = countPlaceable(e);
-                const freeOwn = viewType === 'class' ? SLOT_COUNT - busyCount(tBusyIdx, e.teacher) : SLOT_COUNT - busyCount(cBusyIdx, e.cls);
+                const freeOwn = viewType === 'class' ? slotCount() - busyCount(tBusyIdx, e.teacher) : slotCount() - busyCount(cBusyIdx, e.cls);
                 return `<div class="pool-item${e.key === poolSel ? ' pool-active' : ''}" draggable="true" onclick="selectPool(${i})" ondragstart="dragPool(event,${i})" ondragend="dragEnd()">
                     <div class="flex justify-between gap-2 text-sm"><b class="truncate">${esc(e.subject)}</b><span class="shrink-0 text-xs font-bold text-amber-700">còn ${e.left}/${e.total}</span></div>
                     <div class="text-[11px] text-gray-600 truncate">${viewType === 'class' ? 'GV: ' + esc(e.teacher) : 'Lớp ' + esc(e.cls)}</div>
                     <div class="text-[11px] mt-0.5 ${can ? 'text-green-700' : 'text-red-600 font-semibold'}">${can ? `Xếp được vào ${can} ô` : 'Không còn ô nào phù hợp'}</div>
-                    <div class="text-[11px] text-gray-500">${viewType === 'class' ? 'GV' : 'Lớp'} trống ${freeOwn}/${SLOT_COUNT} tiết trong tuần</div>
+                    <div class="text-[11px] text-gray-500">${viewType === 'class' ? 'GV' : 'Lớp'} trống ${freeOwn}/${slotCount()} tiết trong tuần</div>
                 </div>`;
             }).join('');
         }
@@ -1784,7 +1888,7 @@
             const e = poolList[i]; if (!e) return;
             buildSlotIndex();
             const c = placeConflict(e, d, p);
-            if (c) return showToast(c.kind === 'teacher' ? `Lỗi: GV ${e.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}.` : `Lỗi: Lớp ${e.cls} đang học ${c.s.subject} với ${c.s.teacher}.`, "error");
+            if (c) return showToast(c.kind === 'cap' ? `Thứ ${d.slice(1)} chỉ xếp tối đa ${getDayCap(d)} tiết.` : c.kind === 'teacher' ? `Lỗi: GV ${e.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}.` : `Lỗi: Lớp ${e.cls} đang học ${c.s.subject} với ${c.s.teacher}.`, "error");
             globalSchedule.push({ id: newCellId(), day: d, period: p, teacher: e.teacher, subject: e.subject, cls: e.cls, type: e.type });
             saveDataToStorage(); setMode('manual'); renderDataSummary(); renderTimetable();
             showToast(`Đã xếp ${e.subject} (${e.teacher}) vào ${slotLabel(d, p)}.`, "success");
@@ -1797,8 +1901,7 @@
         }
 
         // --- TIẾT TRỐNG CỦA GIÁO VIÊN ---
-        const SLOT_COUNT = DAYS.length * PERIODS.length;
-
+        
         // Map: tên GV -> Map("t2|s1" -> tiết đang dạy)
         function teacherBusyMap() {
             const m = new Map();
@@ -1833,9 +1936,9 @@
 
             const busy = (teacherBusyMap().get(freeTeacher)) || new Map();
             const hasSchedule = globalSchedule.length > 0;
-            const freeCount = SLOT_COUNT - busy.size;
+            const freeCount = slotCount() - busy.size;
             $('free-summary').innerHTML = hasSchedule
-                ? `<b class="text-green-700">${freeCount}</b> tiết trống / <b class="text-blue-700">${busy.size}</b> tiết dạy (trên ${SLOT_COUNT} ô T2-T7).`
+                ? `<b class="text-green-700">${freeCount}</b> tiết trống / <b class="text-blue-700">${busy.size}</b> tiết dạy (trên ${slotCount()} ô T2-T7).`
                 : `Chưa xếp TKB nên mọi tiết đều trống.`;
 
             let html = `<table class="w-full border-collapse text-center text-[11px]"><thead><tr><th class="border p-1 bg-gray-50 w-8">Tiết</th>${DAYS.map(d => `<th class="border p-1 bg-gray-50">T${d.slice(1)}</th>`).join('')}</tr></thead><tbody>`;
@@ -1844,13 +1947,14 @@
                 DAYS.forEach(d => {
                     const b = busy.get(`${d}|${p}`);
                     if (b) html += `<td class="border p-1 ${b.type === 'hdtn' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'} font-semibold" title="${esc(b.subject)} - Lớp ${esc(b.cls)}">${esc(b.cls)}</td>`;
+                    else if (!slotAllowed(d, p)) html += `<td class="border p-1 cap-off text-gray-300" title="${esc(slotLabel(d, p))}: không xếp">–</td>`;
                     else html += `<td class="border p-1 free-cell" title="${esc(slotLabel(d, p))}: trống"><i class="fa-solid fa-check text-[9px]"></i></td>`;
                 });
                 html += `</tr>`;
             });
             html += `<tr><td class="border p-1 bg-gray-50 font-medium" title="Số tiết trống mỗi ngày">Trống</td>${DAYS.map(d => {
-                const n = PERIODS.filter(p => !busy.has(`${d}|${p}`)).length;
-                const off = hasSchedule && n === PERIODS.length;
+                const n = PERIODS.filter(p => slotAllowed(d, p) && !busy.has(`${d}|${p}`)).length;
+                const off = hasSchedule && n === getDayCap(d);
                 return `<td class="border p-1 font-bold ${off ? 'bg-green-600 text-white' : 'text-green-700'}" title="${off ? 'Nghỉ cả ngày' : ''}">${off ? 'Nghỉ' : n}</td>`;
             }).join('')}</tr>`;
             html += `</tbody></table>`;
@@ -1902,12 +2006,14 @@
                 slots.forEach(([d, p]) => {
                     const k = `${d}|${p}`, x = b.get(k);
                     if (x) html += `<td class="border p-0.5 ${x.type === 'hdtn' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}${selCls(d, p)}" title="${esc(x.subject)} - Lớp ${esc(x.cls)}">${esc(x.cls)}</td>`;
+                    else if (!slotAllowed(d, p)) html += `<td class="border p-0.5 cap-off text-gray-300" title="Không xếp">–</td>`;
                     else { freeN++; slotFree.get(k).push(t.name); html += `<td class="border p-0.5 free-cell${selCls(d, p)}"><i class="fa-solid fa-check text-[9px]"></i></td>`; }
                 });
                 html += `<td class="border p-1 font-bold text-green-700">${freeN}</td></tr>`;
             });
 
             html += `<tr><td class="border px-2 py-1.5 text-left bg-gray-100 font-bold sticky left-0 z-10">Số GV trống</td>${slots.map(([d, p]) => {
+                if (!slotAllowed(d, p)) return `<td class="border p-1 bg-gray-100 text-gray-300">–</td>`;
                 const n = slotFree.get(`${d}|${p}`).length;
                 return `<td class="border p-1 bg-gray-50 font-bold text-green-700${selCls(d, p)}">${n}</td>`;
             }).join('')}<td class="border bg-gray-50"></td></tr>`;
@@ -2028,6 +2134,10 @@
             if (opts.master) sheets.push({ name: uniqueSheetName('TKB tổng hợp GV', used), xml: masterSheetXml(opts.master, year, true) });
             else models.forEach(m => { sheets.push({ name: uniqueSheetName(m.viewType === 'class' ? `Lớp ${m.value}` : m.value, used), xml: timetableSheetXml(m, year, sheets.length === 0) }); });
             if (opts.listSheet) sheets.push({ name: uniqueSheetName('Danh sách tiết', used), xml: lessonListSheetXml(sheets.length === 0) });
+            return assembleXlsx(sheets);
+        }
+
+        function assembleXlsx(sheets) {
             const n = sheets.length;
             const files = [
                 { name: '[Content_Types].xml', content: XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>' },
@@ -2161,6 +2271,356 @@
             const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename;
             document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
         }
+        // ================= NHẬP / XUẤT EXCEL DỮ LIỆU GIÁO VIÊN =================
+        const TEACHER_HEADS = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Môn', 'Lớp', 'Số tiết'];
+        const dutyText = t => (t.duties || []).map(d => `${d.name}: ${d.period}`).join('; ');
+        const xCell = (ref, style, v) => (v === '' || v == null) ? xBlank(ref, style) : xStr(ref, style, v);
+
+        // ----- Xuất -----
+        function teacherRowsData(teachers) {
+            const out = [];
+            teachers.forEach((t, ti) => {
+                const list = (t.teaching || []).length ? t.teaching : [null];
+                list.forEach((tc, k) => out.push({ stt: ti + 1, name: t.name, dept: t.dept || '', duty: k === 0 ? dutyText(t) : '', sub: tc ? tc.sub : '', cls: tc ? tc.cls : '', prd: tc ? Number(tc.prd) : null }));
+            });
+            return out;
+        }
+        function teacherAssignSheetXml(data, selected) {
+            const L = 'ABCDEFG', rows = [`<row r="1" ht="24" customHeight="1">${TEACHER_HEADS.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
+            data.forEach((d, i) => {
+                const r = i + 2;
+                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, d.stt)}${xCell(`B${r}`, XS.listL, d.name)}${xCell(`C${r}`, XS.listL, d.dept)}${xCell(`D${r}`, XS.listL, d.duty)}${xCell(`E${r}`, XS.listL, d.sub)}${xCell(`F${r}`, XS.listC, d.cls)}${d.prd == null ? xBlank(`G${r}`, XS.listC) : xNum(`G${r}`, XS.listC, d.prd)}</row>`);
+            });
+            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 18, 10, 9], rows, merges: [], dimension: `A1:G${data.length + 1}`, freezeTopRow: true, landscapeFit: false });
+        }
+        function teacherSummarySheetXml(teachers, selected) {
+            const heads = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Tiết kiêm nhiệm', 'Tiết dạy', 'Tổng tiết'], L = 'ABCDEFG';
+            const rows = [`<row r="1" ht="24" customHeight="1">${heads.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
+            teachers.forEach((t, i) => {
+                const r = i + 2;
+                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, i + 1)}${xCell(`B${r}`, XS.listL, t.name)}${xCell(`C${r}`, XS.listL, t.dept || '')}${xCell(`D${r}`, XS.listL, dutyText(t))}${xNum(`E${r}`, XS.listC, round1(t.dutyPeriods))}${xNum(`F${r}`, XS.listC, round1(t.teachPeriods))}${xNum(`G${r}`, XS.listC, round1(t.total))}</row>`);
+            });
+            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 14, 10, 10], rows, merges: [], dimension: `A1:G${teachers.length + 1}`, freezeTopRow: true, landscapeFit: false });
+        }
+        function buildTeacherXlsx(teachers) {
+            const used = new Set();
+            return assembleXlsx([
+                { name: uniqueSheetName('Phân công', used), xml: teacherAssignSheetXml(teacherRowsData(teachers), true) },
+                { name: uniqueSheetName('Tổng hợp GV', used), xml: teacherSummarySheetXml(teachers, false) }
+            ]);
+        }
+        function buildTeacherTemplateXlsx() {
+            const demo = [
+                { name: 'Nguyễn Văn A', dept: 'Tổ Toán - Tin', duties: [{ name: 'GVCN', period: 4 }, { name: 'Tổ trưởng', period: 3 }], teaching: [{ sub: 'Toán', cls: '10A1', prd: 4 }, { sub: 'Toán', cls: '10A2', prd: 4 }] },
+                { name: 'Trần Thị B', dept: 'Tổ Ngữ văn', duties: [{ name: 'PBT Đoàn', period: 2 }], teaching: [{ sub: 'Ngữ văn', cls: '11A1', prd: 3 }, { sub: 'HĐTN-HN', cls: '11A1', prd: 3 }] }
+            ];
+            const guide = [
+                'HƯỚNG DẪN NHẬP DỮ LIỆU GIÁO VIÊN',
+                '1. Sheet "Phân công": mỗi dòng là một phân công (giáo viên - môn - lớp - số tiết/tuần). Giữ nguyên dòng tiêu đề.',
+                '2. Một giáo viên dạy nhiều môn/lớp thì viết nhiều dòng. Có thể để trống ô Họ và tên ở các dòng sau của cùng giáo viên.',
+                '3. Cột Kiêm nhiệm ghi dạng "Tên: số tiết", ngăn cách bằng dấu chấm phẩy. Ví dụ: GVCN: 4; Tổ trưởng: 3; Thư ký HĐ: 1.5',
+                '4. Các tên có sẵn không ghi số tiết sẽ lấy mặc định: GVCN 4, Tổ trưởng 3, Tổ phó 1, BT Đoàn 6, PBT Đoàn 2.',
+                '5. Lớp viết liền, không dấu cách (VD: 10A1). Số tiết là số nguyên dương. Cột STT không bắt buộc.',
+                '6. Xóa 2 dòng mẫu trước khi nhập dữ liệu thật, rồi vào mục "Nhập Excel" trong phần mềm để chọn file này.'
+            ];
+            const grows = guide.map((t, i) => `<row r="${i + 1}" ht="${i === 0 ? 26 : 22}" customHeight="1">${xStr(`A${i + 1}`, i === 0 ? XS.head : XS.listL, t)}</row>`);
+            const used = new Set();
+            return assembleXlsx([
+                { name: uniqueSheetName('Phân công', used), xml: teacherAssignSheetXml(teacherRowsData(demo), true) },
+                { name: uniqueSheetName('Hướng dẫn', used), xml: xlsxSheetXml({ selected: false, cols: [120], rows: grows, merges: [], dimension: `A1:A${guide.length}`, freezeTopRow: false, landscapeFit: false }) }
+            ]);
+        }
+        function exportTeachersXlsx() {
+            if (!dbTeachers.length) return showToast("Chưa có dữ liệu giáo viên để xuất.", "error");
+            const d = new Date(), pad = n => String(n).padStart(2, '0');
+            downloadBlob(buildTeacherXlsx(dbTeachers), `Du_lieu_giao_vien_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.xlsx`);
+            showToast(`Đã xuất ${dbTeachers.length} giáo viên ra file Excel.`, "success");
+        }
+        function downloadTeacherTemplate() { downloadBlob(buildTeacherTemplateXlsx(), 'Mau_nhap_giao_vien.xlsx'); }
+
+        // ----- Đọc file .xlsx (tự đọc ZIP, không cần thư viện ngoài) -----
+        async function inflateRaw(bytes) {
+            if (typeof DecompressionStream === 'undefined') throw new Error('Trình duyệt này chưa đọc được file .xlsx nén. Hãy dùng Chrome/Edge bản mới, hoặc lưu file Excel dạng CSV UTF-8 rồi nhập.');
+            const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+        }
+        function zipDirectory(buf) {
+            const u8 = new Uint8Array(buf), dv = new DataView(buf);
+            let eocd = -1;
+            for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+            if (eocd < 0) throw new Error('File không phải định dạng .xlsx hợp lệ.');
+            const count = dv.getUint16(eocd + 10, true), entries = new Map(), dec = new TextDecoder();
+            let p = dv.getUint32(eocd + 16, true);
+            for (let k = 0; k < count && p + 46 <= u8.length && dv.getUint32(p, true) === 0x02014b50; k++) {
+                const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commLen = dv.getUint16(p + 32, true);
+                entries.set(dec.decode(u8.subarray(p + 46, p + 46 + nameLen)), { method: dv.getUint16(p + 10, true), csize: dv.getUint32(p + 20, true), lho: dv.getUint32(p + 42, true) });
+                p += 46 + nameLen + extraLen + commLen;
+            }
+            return { u8, dv, entries };
+        }
+        async function zipText(zip, name) {
+            const e = zip.entries.get(name); if (!e) return null;
+            const start = e.lho + 30 + zip.dv.getUint16(e.lho + 26, true) + zip.dv.getUint16(e.lho + 28, true);
+            const data = zip.u8.subarray(start, start + e.csize);
+            if (e.method === 0) return new TextDecoder().decode(data);
+            if (e.method === 8) return new TextDecoder().decode(await inflateRaw(data));
+            throw new Error('File .xlsx dùng kiểu nén chưa được hỗ trợ.');
+        }
+        const xmlDoc = txt => new DOMParser().parseFromString(txt, 'application/xml');
+        function xmlText(el) {
+            if (!el) return '';
+            let out = '';
+            for (const t of el.getElementsByTagNameNS('*', 't')) {
+                let skip = false;
+                for (let q = t.parentNode; q && q !== el; q = q.parentNode) if (q.localName === 'rPh') { skip = true; break; }
+                if (!skip) out += t.textContent;
+            }
+            return out;
+        }
+        const colIndex = letters => letters.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+        function sheetXmlToGrid(xml, shared) {
+            const doc = xmlDoc(xml), rowsMap = [];
+            for (const c of doc.getElementsByTagNameNS('*', 'c')) {
+                const m = /^([A-Z]+)(\d+)$/.exec(c.getAttribute('r') || ''); if (!m) continue;
+                const col = colIndex(m[1]), row = parseInt(m[2], 10) - 1, t = c.getAttribute('t');
+                let v = '';
+                if (t === 'inlineStr') v = xmlText(c.getElementsByTagNameNS('*', 'is')[0]);
+                else {
+                    const ve = c.getElementsByTagNameNS('*', 'v')[0], raw = ve ? ve.textContent : '';
+                    v = t === 's' ? (shared[parseInt(raw, 10)] ?? '') : t === 'b' ? (raw === '1' ? 'TRUE' : 'FALSE') : t === 'e' ? '' : raw;
+                }
+                (rowsMap[row] || (rowsMap[row] = []))[col] = v;
+            }
+            return Array.from(rowsMap, r => r ? Array.from(r, x => x == null ? '' : String(x)) : []);
+        }
+        async function openXlsx(buf) {
+            const zip = zipDirectory(buf);
+            const wbXml = await zipText(zip, 'xl/workbook.xml');
+            if (!wbXml) throw new Error('File không phải bảng tính Excel (.xlsx).');
+            const relsXml = await zipText(zip, 'xl/_rels/workbook.xml.rels'), sstXml = await zipText(zip, 'xl/sharedStrings.xml');
+            const shared = sstXml ? Array.from(xmlDoc(sstXml).getElementsByTagNameNS('*', 'si'), xmlText) : [];
+            const targets = new Map();
+            if (relsXml) for (const r of xmlDoc(relsXml).getElementsByTagNameNS('*', 'Relationship')) targets.set(r.getAttribute('Id'), r.getAttribute('Target'));
+            const sheets = Array.from(xmlDoc(wbXml).getElementsByTagNameNS('*', 'sheet'), (sh, i) => {
+                const rid = sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || sh.getAttribute('r:id');
+                let target = targets.get(rid) || `worksheets/sheet${i + 1}.xml`;
+                target = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
+                return { name: sh.getAttribute('name') || `Sheet${i + 1}`, load: async () => { const xml = await zipText(zip, target); return xml ? sheetXmlToGrid(xml, shared) : []; } };
+            });
+            return sheets;
+        }
+        function parseCsv(text) {
+            text = text.replace(/^\uFEFF/, '');
+            const first = text.split(/\r?\n/, 1)[0] || '';
+            const delim = [';', '\t', ','].map(d => [d, first.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+            const rows = []; let row = [], cur = '', q = false;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+                else if (ch === '"') q = true;
+                else if (ch === delim) { row.push(cur); cur = ''; }
+                else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+                else cur += ch;
+            }
+            if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+            return rows;
+        }
+
+        // ----- Nhận dạng cột và đọc dữ liệu -----
+        const normVN = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const HEADER_SYNONYMS = {
+            name: ['ho va ten', 'ho ten', 'giao vien', 'ten giao vien', 'gv', 'ten gv', 'ho va ten gv', 'ho va ten giao vien'],
+            dept: ['to', 'to chuyen mon', 'to cm', 'to bo mon', 'to chuyen mon bo mon'],
+            duty: ['kiem nhiem', 'kn', 'chuc vu', 'cong tac kiem nhiem', 'chuc vu kiem nhiem'],
+            subject: ['mon', 'mon hoc', 'mon day', 'mon giang day'],
+            cls: ['lop', 'lop day', 'lop phan cong', 'lop giang day'],
+            prd: ['so tiet', 'tiet', 'so tiet tuan', 'so tiet day', 'tiet tuan', 'so tiet phan cong']
+        };
+        function matchHeader(n) {
+            if (!n) return null;
+            for (const f of Object.keys(HEADER_SYNONYMS)) if (HEADER_SYNONYMS[f].includes(n)) return f;
+            if (/^ho (va )?ten/.test(n) || /^ten (giao vien|gv)/.test(n)) return 'name';
+            if (/^to( |$)/.test(n)) return 'dept';
+            if (/kiem nhiem/.test(n) && !/tiet/.test(n)) return 'duty';
+            if (/^mon( |$)/.test(n)) return 'subject';
+            if (/^lop( |$)/.test(n)) return 'cls';
+            if (/^so tiet/.test(n)) return 'prd';
+            return null;
+        }
+        function findHeader(grid) {
+            for (let r = 0; r < Math.min(grid.length, 25); r++) {
+                const map = {};
+                (grid[r] || []).forEach((cell, c) => { const f = matchHeader(normVN(cell)); if (f && map[f] === undefined) map[f] = c; });
+                if (map.name !== undefined && (map.subject !== undefined || map.cls !== undefined || map.prd !== undefined)) return { row: r, map };
+            }
+            return null;
+        }
+        const DUTY_ALIASES = [
+            ['GVCN', /^(gvcn|chu nhiem|giao vien chu nhiem)$/], ['Tổ trưởng', /^(to truong|tt)$/], ['Tổ phó', /^(to pho|tp)$/],
+            ['Bí thư Đoàn', /^(bt doan|bi thu doan|bi thu)$/], ['PBT Đoàn', /^(pbt doan|pho bt doan|pho bi thu doan|pho bi thu)$/]
+        ];
+        // "GVCN: 4; Tổ trưởng (3); Thư ký HĐ 1,5" -> danh sách kiêm nhiệm
+        function parseDutyText(text) {
+            const list = [], bad = [];
+            String(text).split(/[;\n|]+|,(?=\s*[^\d\s])/).map(x => x.trim()).filter(Boolean).forEach(tok => {
+                let name = tok, num = null;
+                const m = /^(.*?\D)\s*[:=(+]?\s*\+?\s*(\d+(?:[.,]\d+)?)\s*(?:tiết|tiet|t)?\s*\)?$/i.exec(tok);
+                if (m) { name = m[1].replace(/[:=(+\s]+$/, '').trim(); num = parseFloat(m[2].replace(',', '.')); }
+                const alias = DUTY_ALIASES.find(([, re]) => re.test(normVN(name)));
+                const key = alias ? alias[0] : name;
+                const period = round1(num != null ? num : (alias ? DUTY_PERIODS[key] : 0));
+                if (!key) return;
+                if (!(period > 0) || period > 30) { bad.push(key); return; }
+                if (!list.some(d => d.name.toLowerCase() === key.toLowerCase())) list.push({ name: key, period });
+            });
+            return { list, bad };
+        }
+        function parseTeacherGrid(grid, header) {
+            const { row: hr, map } = header, teachers = new Map(), warnings = [];
+            const get = (r, f) => map[f] === undefined ? '' : String((grid[r] || [])[map[f]] ?? '').trim();
+            let last = null, rowCount = 0;
+            for (let r = hr + 1; r < grid.length; r++) {
+                const nameRaw = get(r, 'name').replace(/\s+/g, ' '), deptRaw = get(r, 'dept').replace(/\s+/g, ' '), dutyRaw = get(r, 'duty');
+                const sub = get(r, 'subject').replace(/\s+/g, ' '), cls = get(r, 'cls').replace(/\s+/g, '').toUpperCase(), prdRaw = get(r, 'prd');
+                if (![nameRaw, deptRaw, dutyRaw, sub, cls, prdRaw].some(Boolean)) continue;
+                if (/^tong( cong)?$/.test(normVN(nameRaw))) continue;
+                rowCount++;
+                const name = nameRaw || last;
+                if (!name) { warnings.push(`Dòng ${r + 1}: chưa có tên giáo viên nên bỏ qua.`); continue; }
+                last = name;
+                const key = name.toLowerCase();
+                let t = teachers.get(key);
+                if (!t) { t = { name, dept: '', duties: [], teaching: [] }; teachers.set(key, t); }
+                if (deptRaw && !t.dept) t.dept = deptRaw;
+                if (dutyRaw) {
+                    const { list, bad } = parseDutyText(dutyRaw);
+                    list.forEach(d => { if (!t.duties.some(x => x.name.toLowerCase() === d.name.toLowerCase())) t.duties.push(d); });
+                    bad.forEach(b => warnings.push(`${name}: kiêm nhiệm "${b}" thiếu số tiết hợp lệ nên bỏ qua.`));
+                }
+                if (sub || cls || prdRaw) {
+                    const prd = Number(prdRaw.replace(',', '.'));
+                    if (!sub || !cls || !Number.isInteger(prd) || prd <= 0 || prd > 30) { warnings.push(`Dòng ${r + 1} (${name}): cần đủ môn, lớp và số tiết là số nguyên dương, đã bỏ qua dòng này.`); continue; }
+                    const ex = t.teaching.find(x => x.sub.toLowerCase() === sub.toLowerCase() && x.cls === cls);
+                    if (ex) { ex.prd += prd; warnings.push(`${name}: ${sub} lớp ${cls} xuất hiện nhiều dòng nên đã cộng dồn số tiết.`); }
+                    else t.teaching.push({ sub, cls, prd });
+                }
+            }
+            return { teachers, warnings, rowCount, hasDutyCol: map.duty !== undefined, hasDeptCol: map.dept !== undefined };
+        }
+
+        // ----- Giao diện nhập -----
+        let importParsed = null;
+        function openImportModal() {
+            importParsed = null; $('import-result').classList.add('hidden'); $('import-result').innerHTML = '';
+            $('import-mode').classList.add('hidden'); $('btn-import-apply').disabled = true;
+            $('import-modal').classList.remove('view-hidden'); $('import-modal').classList.add('flex');
+        }
+        function closeImportModal() { $('import-modal').classList.add('view-hidden'); $('import-modal').classList.remove('flex'); }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('import-modal').classList.contains('view-hidden')) closeImportModal(); });
+
+        async function onImportFile(file) {
+            if (!file) return;
+            const box = $('import-result'); importParsed = null;
+            box.classList.remove('hidden'); box.innerHTML = `<div class="text-sm text-gray-500"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Đang đọc file ${esc(file.name)}...</div>`;
+            $('btn-import-apply').disabled = true; $('import-mode').classList.add('hidden');
+            try {
+                const buf = await file.arrayBuffer(), u8 = new Uint8Array(buf);
+                let sheets;
+                if (u8[0] === 0x50 && u8[1] === 0x4B) sheets = await openXlsx(buf);
+                else if (/\.xls$/i.test(file.name) || (u8[0] === 0xD0 && u8[1] === 0xCF)) throw new Error('File .xls (Excel đời cũ) chưa đọc được. Hãy mở bằng Excel, chọn Lưu thành và lưu dạng .xlsx rồi nhập lại.');
+                else sheets = [{ name: 'CSV', load: async () => parseCsv(new TextDecoder('utf-8').decode(u8)) }];
+                sheets.sort((a, b) => (normVN(b.name) === 'phan cong') - (normVN(a.name) === 'phan cong'));
+                let found = null;
+                for (const sh of sheets) { const grid = await sh.load(), h = findHeader(grid); if (h) { found = { sh, grid, h }; break; } }
+                if (!found) throw new Error('Không tìm thấy dòng tiêu đề. File cần có cột "Họ và tên" và ít nhất một trong các cột "Môn", "Lớp", "Số tiết". Hãy dùng file Excel mẫu.');
+                importParsed = parseTeacherGrid(found.grid, found.h); importParsed.sheetName = found.sh.name; importParsed.fileName = file.name;
+                if (!importParsed.teachers.size) throw new Error('Không có dòng giáo viên hợp lệ nào trong file.');
+                renderImportResult();
+            } catch (err) {
+                box.innerHTML = `<div class="rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm p-3"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${esc(err.message)}</div>`;
+            }
+            $('import-file').value = '';
+        }
+
+        function renderImportResult() {
+            if (!importParsed) return;
+            const mode = document.querySelector('input[name="import-mode"]:checked').value, P = importParsed;
+            const existing = new Set(dbTeachers.map(t => t.name.toLowerCase()));
+            const list = Array.from(P.teachers.entries());
+            let nNew = 0, nUpd = 0, assign = 0, periods = 0, noDept = 0;
+            list.forEach(([k, t]) => { if (existing.has(k)) nUpd++; else nNew++; assign += t.teaching.length; periods += t.teaching.reduce((a, x) => a + x.prd, 0); if (!t.dept && !existing.has(k)) noDept++; });
+            const removed = Array.from(existing).filter(k => !P.teachers.has(k)).length;
+            const warn = P.warnings.slice();
+            if (noDept) warn.push(`${noDept} giáo viên mới chưa có tổ chuyên môn sẽ được xếp vào "Chưa phân tổ".`);
+            const chip = (label, val, tone) => `<div class="rounded-lg border ${tone} px-3 py-2 text-center"><div class="text-lg font-extrabold leading-tight">${val}</div><div class="text-[11px]">${label}</div></div>`;
+            const rowsHtml = list.slice(0, 80).map(([k, t]) => {
+                const isOld = existing.has(k);
+                const status = mode === 'replace' ? '<span class="text-blue-700">Thay thế</span>' : isOld ? '<span class="text-amber-700">Cập nhật</span>' : '<span class="text-green-700">Mới</span>';
+                const teach = t.teaching.length ? t.teaching.map(x => `${esc(x.sub)} ${esc(x.cls)} (${x.prd}t)`).join(', ') : `<span class="text-gray-400 italic">${isOld && mode !== 'replace' ? 'giữ phân công hiện có' : 'chưa có phân công dạy'}</span>`;
+                return `<tr class="border-b"><td class="p-2 font-semibold">${esc(t.name)}</td><td class="p-2 text-xs">${esc(t.dept || '')}</td><td class="p-2 text-xs">${esc(t.duties.map(d => `${d.name} (+${d.period})`).join(', '))}</td><td class="p-2 text-xs">${teach}</td><td class="p-2 text-xs font-semibold whitespace-nowrap">${status}</td></tr>`;
+            }).join('');
+            $('import-result').innerHTML = `
+                <div class="text-xs text-gray-500 mb-2"><i class="fa-solid fa-file-excel mr-1 text-green-600"></i>${esc(P.fileName)} - trang "${esc(P.sheetName)}"</div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                    ${chip('Giáo viên trong file', list.length, 'border-blue-200 bg-blue-50 text-blue-800')}
+                    ${chip('Phân công môn/lớp', assign, 'border-gray-200 bg-gray-50 text-gray-700')}
+                    ${chip('Tổng tiết dạy/tuần', periods, 'border-gray-200 bg-gray-50 text-gray-700')}
+                    ${mode === 'replace' ? chip('GV hiện có sẽ bị xóa', removed, removed ? 'border-red-200 bg-red-50 text-red-700' : 'border-gray-200 bg-gray-50 text-gray-700') : chip(`mới / cập nhật`, `${nNew} / ${nUpd}`, 'border-green-200 bg-green-50 text-green-800')}
+                </div>
+                ${warn.length ? `<div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs p-3 mb-3"><div class="font-bold mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Lưu ý (${warn.length})</div><ul class="list-disc pl-4 max-h-28 overflow-y-auto">${warn.slice(0, 50).map(w => `<li>${esc(w)}</li>`).join('')}${warn.length > 50 ? `<li>... và ${warn.length - 50} lưu ý nữa</li>` : ''}</ul></div>` : ''}
+                <div class="border rounded-lg overflow-auto max-h-64"><table class="w-full text-sm border-collapse"><thead class="bg-gray-100 text-gray-700 sticky top-0"><tr><th class="p-2 text-left">Họ và tên</th><th class="p-2 text-left">Tổ</th><th class="p-2 text-left">Kiêm nhiệm</th><th class="p-2 text-left">Phân công dạy</th><th class="p-2 text-left">Trạng thái</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+                ${list.length > 80 ? `<div class="text-[11px] text-gray-500 mt-1">Chỉ hiển thị 80 giáo viên đầu tiên; tất cả ${list.length} giáo viên sẽ được nhập.</div>` : ''}`;
+            $('import-result').classList.remove('hidden'); $('import-mode').classList.remove('hidden'); $('btn-import-apply').disabled = false;
+        }
+
+        // Gỡ khỏi TKB những tiết không còn khớp với phân công hiện tại
+        function reconcileAllSchedule() {
+            const allowed = new Map();
+            dbTeachers.forEach(t => (t.teaching || []).forEach(tc => { const k = `${t.name}|${tc.sub}|${tc.cls}`; allowed.set(k, (allowed.get(k) || 0) + (parseInt(tc.prd) || 0)); }));
+            const seen = new Map(), drop = new Set();
+            globalSchedule.forEach(x => { const k = `${x.teacher}|${x.subject}|${x.cls}`, n = (seen.get(k) || 0) + 1; seen.set(k, n); if (n > (allowed.get(k) || 0)) drop.add(x); });
+            if (drop.size) globalSchedule = globalSchedule.filter(x => !drop.has(x));
+            return drop.size;
+        }
+        function applyTeacherImport(P, mode) {
+            const used = new Set(dbTeachers.map(t => t.id)); let idBase = Date.now();
+            const nextId = () => { while (used.has(idBase)) idBase++; used.add(idBase); return idBase; };
+            const byKey = new Map(dbTeachers.map(t => [t.name.toLowerCase(), t]));
+            const list = mode === 'replace' ? [] : dbTeachers.slice();
+            const oldCount = dbTeachers.length;
+            let added = 0, updated = 0;
+            const recalc = t => { t.teachPeriods = t.teaching.reduce((a, x) => a + (parseInt(x.prd) || 0), 0); t.dutyPeriods = round1(t.duties.reduce((a, d) => a + d.period, 0)); t.total = round1(t.teachPeriods + t.dutyPeriods); };
+            P.teachers.forEach((it, key) => {
+                const ex = mode === 'replace' ? null : byKey.get(key);
+                if (ex) {
+                    if (it.teaching.length) ex.teaching = it.teaching.map(x => ({ ...x }));
+                    if (P.hasDeptCol && it.dept) ex.dept = it.dept;
+                    if (P.hasDutyCol) ex.duties = it.duties.map(d => ({ ...d }));
+                    recalc(ex); updated++;
+                } else {
+                    const t = { id: nextId(), name: it.name, dept: it.dept || 'Chưa phân tổ', duties: it.duties.map(d => ({ ...d })), teaching: it.teaching.map(x => ({ ...x })), teachPeriods: 0, dutyPeriods: 0, total: 0 };
+                    recalc(t); list.push(t); added++;
+                }
+            });
+            dbTeachers = list;
+            list.forEach(t => { if (t.dept && !dbDepartments.includes(t.dept)) dbDepartments.push(t.dept); });
+            const removedLessons = reconcileAllSchedule();
+            if (removedLessons) { lastReport = null; resetCompactState(); }
+            cancelEdit(true); poolSel = null; freeTeacher = '';
+            saveDataToStorage(); renderDepartments(); renderTeachersTable(); renderScheduleReport();
+            return { added, updated, removedTeachers: mode === 'replace' ? Math.max(0, oldCount - updated) : 0, removedLessons };
+        }
+        function applyImportFromModal() {
+            if (!importParsed) return;
+            const mode = document.querySelector('input[name="import-mode"]:checked').value;
+            if (mode === 'replace' && dbTeachers.length && !confirm(`Thay thế toàn bộ ${dbTeachers.length} giáo viên hiện có bằng ${importParsed.teachers.size} giáo viên trong file?`)) return;
+            const r = applyTeacherImport(importParsed, mode);
+            closeImportModal(); importParsed = null;
+            let msg = mode === 'replace' ? `Đã thay thế bằng ${r.added} giáo viên từ Excel.` : `Đã nhập từ Excel: ${r.added} giáo viên mới, ${r.updated} cập nhật.`;
+            if (r.removedLessons) msg += ` ${r.removedLessons} tiết trong TKB không còn khớp phân công nên đã gỡ.`;
+            showToast(msg, "success");
+        }
+
         function openExportModal() {
             if (!globalSchedule.length) return showToast("Chưa có TKB để xuất.", "error");
             const viewType = $('view-type').value, cur = $('main-filter').value, curRadio = document.querySelector('input[name="export-scope"][value="current"]');
@@ -2255,6 +2715,7 @@
         function initApp() {
             loadDataFromStorage();
             ensureSubjectDatalist();
+            loadDayCaps(); renderDayCapPanel();
             renderDepartments();
             renderDutyRows();
             if ($('teaching_container').children.length === 0) addTeachingRow();
