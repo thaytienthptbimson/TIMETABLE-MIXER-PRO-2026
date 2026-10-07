@@ -132,6 +132,7 @@
         .t-chip.is-active b { background: rgba(255,255,255,.25); color: #fff; }
         .t-chip.is-full { border-color: #ffc9d3; color: var(--bad-ink); }
         .t-chip.is-full b { background: var(--bad-soft); color: var(--bad-ink); }
+        .gvcn-tag { font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 4px; background: #ede9fe; color: #5b21b6; margin-left: 2px; vertical-align: 1px; }
         .cap-off { background-image: repeating-linear-gradient(135deg, #eef0f6 0, #eef0f6 6px, #f8f9fd 6px, #f8f9fd 12px); }
         .cap-off-label { font-size: 10px; color: #9aa3bb; text-align: center; padding-top: 10px; font-weight: 600; }
         .cap-viol { box-shadow: inset 0 0 0 2px var(--bad); }
@@ -195,7 +196,7 @@
 
                     <div class="mb-5 border-b pb-4">
                         <h3 class="font-bold text-blue-800 mb-1"><i class="fa-solid fa-briefcase text-sm mr-1"></i> 2. Kiêm nhiệm</h3>
-                        <p class="text-[11px] text-gray-500 mb-3">Tick chọn rồi nhập số tiết được giảm (có thể đổi, kể cả số lẻ như 1.5).</p>
+                        <p class="text-[11px] text-gray-500 mb-3">Tick chọn rồi nhập số tiết được giảm (có thể đổi, kể cả số lẻ như 1.5). Với Chủ nhiệm, ghi thêm lớp chủ nhiệm (VD: 10A1) để dùng tùy chọn GVCN dạy tiết 1.</p>
                         <div id="duty_container" class="space-y-1"></div>
                         <div id="duty_extra_container" class="space-y-2 mt-2"></div>
                         <button type="button" onclick="addExtraDutyRow()" class="mt-2 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 transition">
@@ -320,6 +321,21 @@
                                     <p class="text-[11px] text-blue-800/80 mt-1 leading-tight">Sau khi xếp, tự dồn tiết dạy của GV vào ít buổi hơn, dạy liên tục, hạn chế buổi chỉ có 1 tiết và trống tiết.</p>
                                 </div>
                             </label>
+                        </div>
+                        <div class="p-3 hover:bg-gray-50 border rounded-lg text-sm transition">
+                            <label class="flex items-start cursor-pointer text-gray-800">
+                                <input type="checkbox" id="ai-homeroom" checked onchange="saveHomeOpt()" class="mt-0.5 mr-2 rounded text-blue-600 focus:ring-blue-500">
+                                <div>
+                                    <span class="font-semibold">GVCN dạy tiết 1 lớp chủ nhiệm</span>
+                                    <p class="text-[11px] text-gray-500 mt-1 leading-tight">Mỗi GVCN dạy lớp mình ở tiết 1 ít nhất số buổi dưới đây. Lớp có ít tiết của GVCN hơn mức này thì lấy theo số tiết đó. Cần ghi lớp chủ nhiệm ở dòng "Chủ nhiệm" khi nhập giáo viên.</p>
+                                </div>
+                            </label>
+                            <div class="flex items-center gap-2 mt-2 pl-6 text-xs text-gray-700">
+                                <span>Ít nhất</span>
+                                <input type="number" id="ai-homeroom-n" min="1" max="6" step="1" value="2" onchange="saveHomeOpt()" class="w-14 border border-gray-300 rounded px-2 py-1 text-center text-sm" title="Số buổi trong tuần GVCN dạy tiết 1 của lớp chủ nhiệm">
+                                <span>buổi/tuần</span>
+                            </div>
+                            <div id="ai-homeroom-info" class="text-[11px] text-gray-400 mt-1 pl-6"></div>
                         </div>
                         <div class="p-3 hover:bg-gray-50 border rounded-lg text-sm transition">
                             <label class="flex items-start cursor-pointer text-gray-800">
@@ -754,13 +770,16 @@
                         <input type="checkbox" name="kiem_nhiem" value="${esc(d.key)}" onchange="syncDutyInputs()">
                         <span class="truncate">${esc(d.label)}</span>
                     </label>
+                    ${d.key === 'GVCN' ? `<input type="text" class="duty-cls w-20 border border-gray-300 rounded px-2 py-1 text-sm text-center uppercase disabled:bg-gray-50 disabled:text-gray-300" maxlength="10" placeholder="Lớp" disabled title="Lớp chủ nhiệm (VD: 10A1). Dùng cho tùy chọn GVCN dạy tiết 1">` : ''}
                     <input type="number" class="duty-prd w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center disabled:bg-gray-50 disabled:text-gray-300" min="0.5" max="30" step="0.5" value="${DUTY_PERIODS[d.key] || 1}" disabled title="Số tiết kiêm nhiệm">
                     <span class="text-xs text-gray-500 w-6">tiết</span>
                 </div>`).join('');
         }
         function syncDutyInputs() {
             document.querySelectorAll('#duty_container .duty-row').forEach(row => {
-                row.querySelector('.duty-prd').disabled = !row.querySelector('input[type=checkbox]').checked;
+                const on = row.querySelector('input[type=checkbox]').checked;
+                row.querySelector('.duty-prd').disabled = !on;
+                const c = row.querySelector('.duty-cls'); if (c) c.disabled = !on;
             });
         }
         function addExtraDutyRow(name = '', prd = 1) {
@@ -779,15 +798,17 @@
         // Gom các kiêm nhiệm đã chọn; trả về danh sách và các mục thiếu số tiết
         function collectDuties() {
             const list = [], bad = [], seen = new Set();
-            const push = (name, raw) => {
+            const push = (name, raw, cls) => {
                 const p = round1(parseFloat(raw));
                 if (!name) return;
                 if (!(p > 0)) { bad.push(name); return; }
                 if (seen.has(name.toLowerCase())) return;
-                seen.add(name.toLowerCase()); list.push({ name, period: p });
+                seen.add(name.toLowerCase());
+                const c = name === 'GVCN' ? normCls(cls) : '';
+                list.push(c ? { name, period: p, cls: c } : { name, period: p });
             };
             document.querySelectorAll('#duty_container .duty-row').forEach(row => {
-                if (row.querySelector('input[type=checkbox]').checked) push(row.dataset.key, row.querySelector('.duty-prd').value);
+                if (row.querySelector('input[type=checkbox]').checked) push(row.dataset.key, row.querySelector('.duty-prd').value, (row.querySelector('.duty-cls') || {}).value);
             });
             document.querySelectorAll('#duty_extra_container .duty-extra-row').forEach(row => {
                 push(row.querySelector('.dx-name').value.trim(), row.querySelector('.dx-prd').value);
@@ -821,7 +842,7 @@
             sel.value = t.dept;
             (t.duties || []).forEach(d => {
                 const row = Array.from(document.querySelectorAll('#duty_container .duty-row')).find(r => r.dataset.key === d.name);
-                if (row) { row.querySelector('input[type=checkbox]').checked = true; row.querySelector('.duty-prd').value = d.period; }
+                if (row) { row.querySelector('input[type=checkbox]').checked = true; row.querySelector('.duty-prd').value = d.period; const c = row.querySelector('.duty-cls'); if (c) c.value = d.cls || ''; }
                 else addExtraDutyRow(d.name, d.period);
             });
             syncDutyInputs();
@@ -864,6 +885,12 @@
             });
             const { list: duties, bad } = collectDuties();
             if (bad.length) return showToast(`Hãy nhập số tiết (lớn hơn 0) cho kiêm nhiệm: ${bad.join(', ')}.`, "error");
+            const hc = duties.find(d => d.name === 'GVCN' && d.cls);
+            if (hc) {
+                const other = dbTeachers.find(t => t.id !== editingId && (t.duties || []).some(d => d.name === 'GVCN' && normCls(d.cls) === hc.cls));
+                if (other) return showToast(`Lớp ${hc.cls} đã có GVCN là ${other.name}. Mỗi lớp chỉ có một giáo viên chủ nhiệm.`, "error");
+            }
+            const homeNote = hc && !teaching.some(x => normCls(x.cls) === hc.cls) ? ` Lưu ý: GV chưa dạy tiết nào ở lớp ${hc.cls} nên tùy chọn "GVCN dạy tiết 1" chưa áp dụng được.` : '';
             const dutyPeriods = round1(duties.reduce((a, d) => a + d.period, 0));
             const total = round1(teachPeriods + dutyPeriods);
 
@@ -876,13 +903,13 @@
                 if (removed) lastReport = null;
                 poolSel = null; freeTeacher = '';
                 saveDataToStorage(); cancelEdit(true); renderTeachersTable(); renderScheduleReport();
-                return showToast(removed ? `Đã cập nhật. ${removed} tiết bị gỡ khỏi TKB vì phân công thay đổi, hãy xếp lại ở mục "Tiết cần xếp".` : "Đã cập nhật thông tin giáo viên!", "success");
+                return showToast((removed ? `Đã cập nhật. ${removed} tiết bị gỡ khỏi TKB vì phân công thay đổi, hãy xếp lại ở mục "Tiết cần xếp".` : "Đã cập nhật thông tin giáo viên!") + homeNote, "success");
             }
 
             dbTeachers.push({ id: Date.now(), name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total });
             saveDataToStorage(); renderTeachersTable();
             resetTeacherForm();
-            showToast("Lưu Dữ liệu thành công!", "success");
+            showToast("Lưu Dữ liệu thành công!" + homeNote, "success");
         }
 
         function deleteTeacher(id) {
@@ -902,7 +929,7 @@
             } else {
                 tbody.innerHTML = dbTeachers.map(t => {
                     const colorClass = t.total > 17 ? "text-red-600" : (t.total < 17 ? "text-yellow-600" : "text-green-600");
-                    const duties = (t.duties || []).map(d => `<span class="bg-yellow-100 text-xs px-2 py-1 border border-yellow-200 rounded mr-1 mb-1 inline-block">${esc(d.name)} <b class="text-blue-600">(+${esc(d.period)})</b></span>`).join('') || '<span class="text-gray-400 italic text-xs">Không có</span>';
+                    const duties = (t.duties || []).map(d => `<span class="bg-yellow-100 text-xs px-2 py-1 border border-yellow-200 rounded mr-1 mb-1 inline-block">${esc(d.name)}${d.cls ? ' ' + esc(d.cls) : ''} <b class="text-blue-600">(+${esc(d.period)})</b></span>`).join('') || '<span class="text-gray-400 italic text-xs">Không có</span>';
                     const teaching = (t.teaching || []).map(tc => `<div class="mb-1 text-xs"><b>${esc(tc.sub)}</b> <i class="fa-solid fa-arrow-right text-[9px] mx-1 text-gray-400"></i> Lớp ${esc(tc.cls)} <span class="text-gray-500">(${esc(tc.prd)}t)</span></div>`).join('') || '<span class="text-gray-400 italic text-xs">Chưa có tiết dạy</span>';
                     return `
                     <tr class="border-b hover:bg-blue-50 transition${t.id === editingId ? ' bg-yellow-50' : ''}">
@@ -914,7 +941,7 @@
                     </tr>`;
                 }).join('');
             }
-            renderDataSummary(); updateFilterDropdown();
+            renderDataSummary(); updateFilterDropdown(); renderHomeInfo();
         }
 
         function renderDataSummary() {
@@ -951,6 +978,70 @@
                 for (let i = 0; i < n; i++) list.push({ teacher: t.name, subject: tc.sub, cls: tc.cls, teachPeriods: t.teachPeriods || 0, type: isHdtnSubject(tc.sub) ? 'hdtn' : 'normal' });
             }));
             return list;
+        }
+
+        // ----- GVCN dạy tiết 1 lớp chủ nhiệm -----
+        const normCls = v => String(v ?? '').replace(/\s+/g, '').toUpperCase();
+        // Lớp chủ nhiệm -> tên GVCN (từ kiêm nhiệm "GVCN" có ghi lớp)
+        function homeroomMap() {
+            const m = new Map();
+            dbTeachers.forEach(t => (t.duties || []).forEach(d => { const c = d.name === 'GVCN' ? normCls(d.cls) : ''; if (c && !m.has(c)) m.set(c, t.name); }));
+            return m;
+        }
+        function homeroomOpt() {
+            const on = !!($('ai-homeroom') && $('ai-homeroom').checked);
+            const n = Math.min(DAYS.length, Math.max(1, parseInt(($('ai-homeroom-n') || {}).value, 10) || 2));
+            return { on, n };
+        }
+        // Cấu hình áp dụng khi xếp; null nếu tắt tùy chọn hoặc chưa lớp nào có GVCN
+        function homeroomConfig() { const h = homeroomOpt(), map = homeroomMap(); return h.on && map.size ? { map, n: h.n } : null; }
+        function loadHomeOpt() {
+            try {
+                const o = JSON.parse(localStorage.getItem('tkb_homeroom') || 'null');
+                if (o && $('ai-homeroom')) { $('ai-homeroom').checked = o.on !== false; $('ai-homeroom-n').value = Math.min(DAYS.length, Math.max(1, parseInt(o.n, 10) || 2)); }
+            } catch (e) {}
+        }
+        function saveHomeOpt() {
+            const h = homeroomOpt(); $('ai-homeroom-n').value = h.n;
+            try { localStorage.setItem('tkb_homeroom', JSON.stringify(h)); } catch (e) {}
+            if (globalSchedule.length) renderTimetable();
+        }
+        function renderHomeInfo() {
+            const el = $('ai-homeroom-info'); if (!el) return;
+            const total = new Set(buildLessons().map(l => l.cls)).size, n = homeroomMap().size;
+            el.textContent = n ? `${n}/${total} lớp đã có GVCN` : 'chưa khai báo lớp CN';
+        }
+        // Số tiết GVCN được phân công dạy ở chính lớp chủ nhiệm
+        function homeAssigned(map) {
+            const out = new Map();
+            map.forEach((tn, cls) => {
+                const t = dbTeachers.find(x => x.name === tn);
+                out.set(cls, t ? (t.teaching || []).filter(x => normCls(x.cls) === cls).reduce((a, x) => a + (parseInt(x.prd) || 0), 0) : 0);
+            });
+            return out;
+        }
+        // So số buổi GVCN dạy tiết 1 lớp chủ nhiệm với yêu cầu. list: các tiết (day/period có thể rỗng); assigned: lớp -> số tiết GVCN dạy lớp mình
+        function homeroomReport(list, home, assigned) {
+            const first = PERIODS[0], days = new Map(), have = new Map(), rows = []; let miss = 0;
+            list.forEach(x => {
+                if (x.day == null) return;
+                if (!days.has(x.cls)) days.set(x.cls, new Set());
+                days.get(x.cls).add(x.day);
+                if (x.period === first && home.map.get(x.cls) === x.teacher) have.set(x.cls, (have.get(x.cls) || 0) + 1);
+            });
+            if (!assigned) { assigned = new Map(); list.forEach(x => { if (home.map.get(x.cls) === x.teacher) assigned.set(x.cls, (assigned.get(x.cls) || 0) + 1); }); }
+            home.map.forEach((teacher, cls) => {
+                const a = assigned.get(cls) || 0; if (!a) return;
+                const need = Math.min(home.n, a, days.has(cls) ? days.get(cls).size : DAYS.length), got = have.get(cls) || 0;
+                rows.push({ cls, teacher, need, got });
+                if (got < need) miss += need - got;
+            });
+            return { rows, miss };
+        }
+        function homeStatus() {
+            const h = homeroomConfig(); if (!h) return null;
+            const r = homeroomReport(globalSchedule, h, homeAssigned(h.map));
+            return { n: h.n, miss: r.miss, total: r.rows.length, bad: r.rows.filter(x => x.got < x.need) };
         }
 
         // Khối của lớp: lấy số đứng đầu tên lớp (10A1 -> 10)
@@ -1050,8 +1141,23 @@
             const allowed = new Array(nC);
             cIdx.forEach((c, name) => { allowed[c] = (info.plan.clsSlots.get(name) || []).map(([di, pi]) => di * nP + pi); });
 
-            const add = (i, s) => { slotOf[i] = s; const d = (s / nP) | 0; if (++tOcc[lt[i] * nS + s] === 1) tMask[lt[i] * nD + d] |= 1 << (s % nP); tDay[lt[i] * nD + d]++; subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + s] = i; };
-            const del = (i) => { const s = slotOf[i], d = (s / nP) | 0; if (--tOcc[lt[i] * nS + s] === 0) tMask[lt[i] * nD + d] &= ~(1 << (s % nP)); tDay[lt[i] * nD + d]--; subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + s] = -1; slotOf[i] = -1; };
+            // GVCN dạy tiết 1 lớp chủ nhiệm: need[lớp] = số buổi tối thiểu; hmCnt[lớp] = số buổi hiện đạt
+            const W_HOME = 450, hm = new Uint8Array(nL), need = new Int16Array(nC), hmCnt = new Int16Array(nC);
+            if (opts.home) {
+                const hmTotal = new Int16Array(nC);
+                lessons.forEach((l, i) => { if (opts.home.map.get(normCls(l.cls)) === l.teacher) { hm[i] = 1; hmTotal[lc[i]]++; } });
+                cIdx.forEach((c) => { if (hmTotal[c]) need[c] = Math.min(opts.home.n, hmTotal[c], allowed[c].filter(x => x % nP === 0).length); });
+            }
+            const homeDelta = (a, b) => {
+                const c = lc[a]; if (!need[c] || (!hm[a] && !hm[b])) return 0;
+                const pa = slotOf[a] % nP === 0 ? 1 : 0, pb = slotOf[b] % nP === 0 ? 1 : 0;
+                const dc = (hm[a] ? pb - pa : 0) + (hm[b] ? pa - pb : 0);
+                if (!dc) return 0;
+                return W_HOME * (Math.max(0, need[c] - hmCnt[c] - dc) - Math.max(0, need[c] - hmCnt[c]));
+            };
+
+            const add = (i, s) => { slotOf[i] = s; const d = (s / nP) | 0; if (++tOcc[lt[i] * nS + s] === 1) tMask[lt[i] * nD + d] |= 1 << (s % nP); tDay[lt[i] * nD + d]++; subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + s] = i; if (hm[i] && s % nP === 0) hmCnt[lc[i]]++; };
+            const del = (i) => { const s = slotOf[i], d = (s / nP) | 0; if (hm[i] && s % nP === 0) hmCnt[lc[i]]--; if (--tOcc[lt[i] * nS + s] === 0) tMask[lt[i] * nD + d] &= ~(1 << (s % nP)); tDay[lt[i] * nD + d]--; subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + s] = -1; slotOf[i] = -1; };
             const adj = (i, s) => {
                 if (!opts.noConsec) return 0;
                 const p = s % nP; let c = 0;
@@ -1059,7 +1165,7 @@
                 if (p < nP - 1) { const o = cSlot[lc[i] * nS + s + 1]; if (o >= 0 && ls[o] === ls[i]) c += W_CONSEC; }
                 return c;
             };
-            const costAt = (i, s) => {
+            const costCore = (i, s) => {
                 const d = (s / nP) | 0;
                 let c = W_CLASH * tOcc[lt[i] * nS + s] + W_SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + W_TDAY * tDay[lt[i] * nD + d] + adj(i, s);
                 if (dayOff[lt[i]] === d) c += W_OFF;
@@ -1067,17 +1173,20 @@
                 if (!(m & bit)) c += gapTable[m | bit] - gapTable[m];
                 return c;
             };
+            const homeTerm = (i, s) => (hm[i] && need[lc[i]]) ? W_HOME * Math.max(0, need[lc[i]] - hmCnt[lc[i]] - (s % nP === 0 ? 1 : 0)) : 0;
+            const costAt = (i, s) => costCore(i, s) + homeTerm(i, s);
             const softOf = (i) => {
                 const s = slotOf[i], d = (s / nP) | 0;
-                return (dayOff[lt[i]] === d ? 1 : 0) + (subjDay[(lc[i] * nSub + ls[i]) * nD + d] > 1 ? 1 : 0) + (adj(i, s) ? 1 : 0) + (gapTable[tMask[lt[i] * nD + d]] > 0 ? 1 : 0);
+                return (dayOff[lt[i]] === d ? 1 : 0) + (subjDay[(lc[i] * nSub + ls[i]) * nD + d] > 1 ? 1 : 0) + (adj(i, s) ? 1 : 0) + (gapTable[tMask[lt[i] * nD + d]] > 0 ? 1 : 0)
+                    + (need[lc[i]] > hmCnt[lc[i]] && ((hm[i] && s % nP !== 0) || (!hm[i] && s % nP === 0)) ? 1 : 0);
             };
             const deltaSwap = (a, b) => {
-                const sa = slotOf[a], sb = slotOf[b];
+                const sa = slotOf[a], sb = slotOf[b], hd = homeDelta(a, b);
                 del(a); del(b);
-                let before = costAt(a, sa); add(a, sa); before += costAt(b, sb); del(a);
-                let after = costAt(a, sb); add(a, sb); after += costAt(b, sa); del(a);
+                let before = costCore(a, sa); add(a, sa); before += costCore(b, sb); del(a);
+                let after = costCore(a, sb); add(a, sb); after += costCore(b, sa); del(a);
                 add(a, sa); add(b, sb);
-                return after - before;
+                return after - before + hd;
             };
             const applySwap = (a, b) => { const sa = slotOf[a], sb = slotOf[b]; del(a); del(b); add(a, sb); add(b, sa); };
 
@@ -1138,7 +1247,8 @@
             }
             subjDay.forEach(v => { if (v > 1) spread += v - 1; });
             let gap1 = 0, gap2 = 0; tMask.forEach(m => { gap1 += gapN1[m]; gap2 += gapN2[m]; });
-            return { lessons, unplaced, consec, gap1, gap2, quality: unplaced.length * 100000 + (opts.noConsec ? consec * 1000 : 0) + (opts.tgap ? gap2 * 3000 + gap1 * 20 : 0) + spread * 10 };
+            let homeMiss = 0; for (let c = 0; c < nC; c++) homeMiss += Math.max(0, need[c] - hmCnt[c]);
+            return { lessons, unplaced, consec, gap1, gap2, homeMiss, quality: unplaced.length * 100000 + homeMiss * 5000 + (opts.noConsec ? consec * 1000 : 0) + (opts.tgap ? gap2 * 3000 + gap1 * 20 : 0) + spread * 10 };
         }
 
         function attemptSchedule(baseLessons, opts, clsCount, tchCount, info) {
@@ -1176,6 +1286,7 @@
                 for (let i = 0; i < idx; i++) if (!cSlot.has(key(L.cls, d, PERIODS[i]))) holes++;
                 let sc = Math.random() * 2 + 3 * (classDay.get(`${L.cls}|${d}`) || 0) + 2 * (teacherDay.get(`${L.teacher}|${d}`) || 0) + 40 * (subjDay.get(`${L.cls}|${L.subject}|${d}`) || 0) + 4 * holes + 0.3 * idx;
                 if (opts.noConsec && adjacentSame(L, d, p)) sc += 1000;
+                if (opts.home && idx === 0 && opts.home.map.get(L.cls) === L.teacher) sc -= 6;
                 return sc;
             };
 
@@ -1209,6 +1320,30 @@
             };
             pending.forEach(L => tryRepair(L));
 
+            // GVCN dạy tiết 1 lớp chủ nhiệm: đổi chỗ tiết của GVCN về tiết 1 các buổi còn thiếu (không gây trùng GV/lớp)
+            if (opts.home) {
+                const first = PERIODS[0];
+                for (const [cls, teacher] of opts.home.map) {
+                    const all = lessons.filter(L => L.cls === cls && L.teacher === teacher);
+                    const needN = Math.min(opts.home.n, all.length);
+                    let have = all.filter(L => L.period === first).length;
+                    for (const strict of [true, false]) {
+                        for (const A of shuffle(all.filter(L => L.day !== null && L.period !== first))) {
+                            if (have >= needN) break;
+                            for (const d2 of shuffle(DAYS.slice())) {
+                                if (!slotAllowed(d2, first) || (strict && d2 === dayOff.get(teacher))) continue;
+                                if (tSlot.has(key(teacher, d2, first))) continue;
+                                const X = cSlot.get(key(cls, d2, first)), d1 = A.day, p1 = A.period;
+                                if (X && (X.teacher === teacher || tSlot.has(key(X.teacher, d1, p1)))) continue;
+                                if (!X) { unplace(A); place(A, d2, first); }
+                                else { unplace(A); unplace(X); place(A, d2, first); place(X, d1, p1); }
+                                have++; break;
+                            }
+                        }
+                    }
+                }
+            }
+
             const unplaced = lessons.filter(l => l.day === null);
             let consec = 0, spread = 0;
             lessons.forEach(L => {
@@ -1217,8 +1352,9 @@
                 if (nxt) { const o = cSlot.get(key(L.cls, L.day, nxt)); if (o && o.subject === L.subject) consec++; }
             });
             subjDay.forEach(v => { if (v > 1) spread += v - 1; });
-            const quality = unplaced.length * 100000 + (opts.noConsec ? consec * 1000 : 0) + spread * 10;
-            return { lessons, unplaced, consec, quality };
+            const hr = opts.home ? homeroomReport(lessons, opts.home) : null;
+            const quality = unplaced.length * 100000 + (opts.noConsec ? consec * 1000 : 0) + spread * 10 + (hr ? hr.miss * 5000 : 0);
+            return { lessons, unplaced, consec, quality, homeMiss: hr ? hr.miss : 0 };
         }
 
         function setSchedulingUI(busy) {
@@ -1262,6 +1398,7 @@
             const opts = { dayOff: $('ai-dayoff').checked, noConsec: $('ai-noconsecutive').checked, pack: $('ai-pack').checked };
             opts.tgap = opts.pack && $('ai-tgap').checked;
             opts.compact = $('ai-compact').checked;
+            opts.home = homeroomConfig();
             $('ai-label').textContent = 'AI đang giải thuật toán...';
             const info = analyzeData(lessons, opts);
             const bar = $('ai-bar'), pct = $('ai-percent');
@@ -1270,7 +1407,7 @@
 
             const MAX_ATTEMPTS = opts.pack ? 8 : 25, LIMIT_MS = opts.pack ? 6000 : 1500, t0 = performance.now();
             let attempts = 0, best = null;
-            const needMore = () => !(best.quality < 1 || (opts.pack && attempts >= 4 && best.unplaced.length === 0 && (!opts.tgap || !best.gap2) && (!opts.noConsec || !best.consec)));
+            const needMore = () => !(best.quality < 1 || (opts.pack && attempts >= 4 && best.unplaced.length === 0 && (!opts.tgap || !best.gap2) && (!opts.noConsec || !best.consec) && (!opts.home || !best.homeMiss)));
             const step = () => {
                 try {
                     const sliceStart = performance.now();
@@ -1315,7 +1452,7 @@
             const missing = new Map();
             best.unplaced.forEach(l => { const k = `${l.teacher}|${l.subject}|${l.cls}`; missing.set(k, (missing.get(k) || 0) + 1); });
             lastReport = {
-                placed: globalSchedule.length, total: best.lessons.length, pack: !!opts.pack, compact: best.compact || null, tgap: !!opts.tgap, gap1: best.gap1 || 0, gap2: best.gap2 || 0, consec: opts.noConsec ? best.consec : 0,
+                placed: globalSchedule.length, total: best.lessons.length, pack: !!opts.pack, compact: best.compact || null, tgap: !!opts.tgap, gap1: best.gap1 || 0, gap2: best.gap2 || 0, consec: opts.noConsec ? best.consec : 0, home: homeStatus(),
                 warnings: info.warnings, missing: Array.from(missing.entries()).map(([k, n]) => { const [t, s, c] = k.split('|'); return `${t} - ${s} - Lớp ${c}: thiếu ${n} tiết`; })
             };
             $('ai-bar').style.width = '100%'; $('ai-percent').innerText = '100%'; freeSlotSel = null;
@@ -1331,12 +1468,15 @@
             const el = $('schedule-report');
             if (!el) return;
             if (!lastReport) { el.classList.add('hidden'); return; }
-            const r = lastReport, ok = r.missing.length === 0 && r.warnings.length === 0 && r.consec === 0 && !(r.gap2 > 0);
+            const r = lastReport, ok = r.missing.length === 0 && r.warnings.length === 0 && r.consec === 0 && !(r.gap2 > 0) && !(r.home && r.home.miss > 0);
             el.className = `mt-4 text-xs rounded-lg border p-3 leading-relaxed ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`;
             let html = `<div class="font-bold text-sm mb-1">Đã xếp ${r.placed}/${r.total} tiết</div>`;
             if (r.consec > 0) html += `<div class="mb-1">Còn ${r.consec} cặp tiết liền nhau cùng môn.</div>`;
             if (r.compact) html += `<div class="mb-1">Xếp gọn cho GV: số buổi dạy ${r.compact.before.days} → ${r.compact.after.days}, buổi chỉ 1 tiết ${r.compact.before.one} → ${r.compact.after.one}.</div>`;
             if (r.tgap) html += `<div class="mb-1">GV trống giữa các tiết dạy: ${r.gap1} chỗ trống 1 tiết (cho phép)${r.gap2 > 0 ? `, <b>${r.gap2} chỗ trống từ 2 tiết (chưa đạt)</b>` : ', không có chỗ trống từ 2 tiết'}.</div>`;
+            if (r.home) html += r.home.miss > 0
+                ? `<div class="mb-1">GVCN dạy tiết 1 lớp chủ nhiệm: <b>${r.home.bad.length}/${r.home.total} lớp chưa đủ buổi</b> (${esc(r.home.bad.slice(0, 5).map(x => `${x.cls}: ${x.got}/${x.need}`).join(', '))}${r.home.bad.length > 5 ? '...' : ''}).</div>`
+                : `<div class="mb-1">GVCN dạy tiết 1 lớp chủ nhiệm: đạt ở ${r.home.total}/${r.home.total} lớp (mức đặt: ${r.home.n} buổi/tuần).</div>`;
             if (r.missing.length) html += `<div class="font-semibold">Chưa xếp được:</div><ul class="list-disc pl-4 mb-1">${r.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.warnings.length) html += `<div class="font-semibold">Dữ liệu cần kiểm tra:</div><ul class="list-disc pl-4">${r.warnings.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
             if (r.pack && r.missing.length) html += `<div class="mt-1">Mẹo: GV có quá nhiều tiết trùng khung buổi của các lớp. Hãy giảm tiết dồn vào 1 khối, hoặc bỏ chọn "Gói gọn buổi học" rồi xếp lại.</div>`;
@@ -1397,6 +1537,24 @@
             const slotOf = new Int16Array(nL).fill(-1), tOcc = new Int16Array(nT * nS), tMask = new Uint8Array(nT * nD);
             const subjDay = new Int16Array(nC * nSub * nD), cSlot = new Int16Array(nC * nS).fill(-1);
 
+            // GVCN dạy tiết 1 lớp chủ nhiệm: giữ đủ số buổi (hoán đổi trong lớp không được làm mất)
+            const W_HOME = 450, hm = new Uint8Array(nL), need = new Int16Array(nC), hmCnt = new Int16Array(nC);
+            if (opts.home) {
+                const hmTotal = new Int16Array(nC), p0days = new Int16Array(nC);
+                items.forEach((x, i) => {
+                    if (opts.home.map.get(normCls(x.cls)) === x.teacher) { hm[i] = 1; hmTotal[lc[i]]++; }
+                    if (x.period === PERIODS[0]) p0days[lc[i]]++;
+                });
+                for (let c = 0; c < nC; c++) if (hmTotal[c]) need[c] = Math.min(opts.home.n, hmTotal[c], p0days[c]);
+            }
+            const homeDelta = (a, b) => {
+                const c = lc[a]; if (!need[c] || (!hm[a] && !hm[b])) return 0;
+                const pa = slotOf[a] % nP === 0 ? 1 : 0, pb = slotOf[b] % nP === 0 ? 1 : 0;
+                const dc = (hm[a] ? pb - pa : 0) + (hm[b] ? pa - pb : 0);
+                if (!dc) return 0;
+                return W_HOME * (Math.max(0, need[c] - hmCnt[c] - dc) - Math.max(0, need[c] - hmCnt[c]));
+            };
+
             // Chi phí của 1 GV trong 1 buổi theo mặt nạ các tiết dạy: số buổi, buổi chỉ 1 tiết, trống 1 tiết, trống từ 2 tiết
             const dayTable = new Int16Array(1 << nP);
             for (let m = 1; m < (1 << nP); m++) {
@@ -1409,8 +1567,8 @@
                 dayTable[m] = c;
             }
 
-            const add = (i, sl) => { slotOf[i] = sl; const d = (sl / nP) | 0; if (++tOcc[lt[i] * nS + sl] === 1) tMask[lt[i] * nD + d] |= 1 << (sl % nP); subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + sl] = i; };
-            const del = (i) => { const sl = slotOf[i], d = (sl / nP) | 0; if (--tOcc[lt[i] * nS + sl] === 0) tMask[lt[i] * nD + d] &= ~(1 << (sl % nP)); subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + sl] = -1; slotOf[i] = -1; };
+            const add = (i, sl) => { slotOf[i] = sl; const d = (sl / nP) | 0; if (++tOcc[lt[i] * nS + sl] === 1) tMask[lt[i] * nD + d] |= 1 << (sl % nP); subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + sl] = i; if (hm[i] && sl % nP === 0) hmCnt[lc[i]]++; };
+            const del = (i) => { const sl = slotOf[i], d = (sl / nP) | 0; if (hm[i] && sl % nP === 0) hmCnt[lc[i]]--; if (--tOcc[lt[i] * nS + sl] === 0) tMask[lt[i] * nD + d] &= ~(1 << (sl % nP)); subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + sl] = -1; slotOf[i] = -1; };
             const adj = (i, sl) => {
                 if (!opts.noConsec) return 0;
                 const p = sl % nP; let c = 0;
@@ -1418,19 +1576,19 @@
                 if (p < nP - 1) { const o = cSlot[lc[i] * nS + sl + 1]; if (o >= 0 && ls[o] === ls[i]) c += W.CONSEC; }
                 return c;
             };
-            const costAt = (i, sl) => {
+            const costCore = (i, sl) => {
                 const d = (sl / nP) | 0, m = tMask[lt[i] * nD + d], bit = 1 << (sl % nP);
                 let c = W.CLASH * tOcc[lt[i] * nS + sl] + W.SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + adj(i, sl);
                 if (!(m & bit)) c += dayTable[m | bit] - dayTable[m];
                 return c;
             };
             const deltaSwap = (a, b) => {
-                const sa = slotOf[a], sb = slotOf[b];
+                const sa = slotOf[a], sb = slotOf[b], hd = homeDelta(a, b);
                 del(a); del(b);
-                let before = costAt(a, sa); add(a, sa); before += costAt(b, sb); del(a);
-                let after = costAt(a, sb); add(a, sb); after += costAt(b, sa); del(a);
+                let before = costCore(a, sa); add(a, sa); before += costCore(b, sb); del(a);
+                let after = costCore(a, sb); add(a, sb); after += costCore(b, sa); del(a);
                 add(a, sa); add(b, sb);
-                return after - before;
+                return after - before + hd;
             };
             const applySwap = (a, b) => { const sa = slotOf[a], sb = slotOf[b]; del(a); del(b); add(a, sb); add(b, sa); };
 
@@ -1490,6 +1648,7 @@
             const st = teacherStats(globalSchedule);
             lastReport.gap1 = st.gap1; lastReport.gap2 = st.gap2;
             lastReport.consec = $('ai-noconsecutive').checked ? consecCount(globalSchedule) : 0;
+            lastReport.home = homeStatus();
         }
         function resetCompactState() {
             compactBackup = null; compactAfterJson = '';
@@ -1525,7 +1684,7 @@
                 try {
                     const backup = globalSchedule.map(x => ({ ...x })), work = globalSchedule.map(x => ({ ...x }));
                     const before = teacherStats(backup);
-                    compactLessons(work, { noConsec: $('ai-noconsecutive').checked }, Math.min(3000, 500 + work.length * 5));
+                    compactLessons(work, { noConsec: $('ai-noconsecutive').checked, home: homeroomConfig() }, Math.min(3000, 500 + work.length * 5));
                     if (!sameStructure(backup, work)) throw new Error("kết quả không hợp lệ nên TKB được giữ nguyên");
                     const after = teacherStats(work);
                     globalSchedule = work; compactBackup = backup; compactAfterJson = JSON.stringify(work);
@@ -1571,6 +1730,11 @@
                     issues.push({ cls: list[counts.indexOf(Math.min(...counts))], text: `Thứ ${d.slice(1)}: ${t}.` });
                 });
             });
+            // GVCN dạy tiết 1 lớp chủ nhiệm
+            const hcfg = homeroomConfig();
+            if (hcfg) homeroomReport(globalSchedule, hcfg, homeAssigned(hcfg.map)).rows.forEach(r => {
+                if (r.got < r.need) issues.push({ cls: r.cls, text: `Lớp ${r.cls}: GVCN ${r.teacher} dạy tiết 1 lớp chủ nhiệm được ${r.got}/${r.need} buổi trong tuần.` });
+            });
             // GV trống tiết giữa các tiết dạy trong buổi: trống 1 tiết là cho phép, từ 2 tiết liền là lỗi
             const tHas = new Set(globalSchedule.map(x => `${x.teacher}|${x.day}|${x.period}`));
             const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
@@ -1597,7 +1761,7 @@
             if (!sess) { el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có TKB để kiểm tra.</div>`; return; }
             const note = sess.gap1 ? `<div class="mt-1 text-[11px] text-gray-500">Còn ${sess.gap1} chỗ GV trống 1 tiết giữa hai tiết dạy (được phép).</div>` : '';
             if (!sess.issues.length) {
-                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt: tiết xếp liền từ tiết 1, mỗi buổi tối thiểu ${MIN_PERIODS} tiết, các lớp cùng khối có cùng số tiết mỗi buổi, GV không trống quá 1 tiết giữa các tiết dạy.</div>${note}`;
+                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt: tiết xếp liền từ tiết 1, mỗi buổi tối thiểu ${MIN_PERIODS} tiết, các lớp cùng khối có cùng số tiết mỗi buổi, GV không trống quá 1 tiết giữa các tiết dạy${homeroomConfig() ? ', GVCN dạy tiết 1 lớp chủ nhiệm đủ buổi' : ''}.</div>${note}`;
                 return;
             }
             const shown = sess.issues.slice(0, 40);
@@ -1631,7 +1795,7 @@
             const selectedVal = sel.value;
             $('lbl-current-class').innerText = selectedVal ? (viewType === 'class' ? `Lớp ${selectedVal}` : `Giáo viên: ${selectedVal}`) : "Chưa chọn dữ liệu";
             const tbody = $('tkb-body'), hasData = buildLessons().length > 0;
-            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel(); renderTeacherChips(); renderDayCapNote();
+            buildSlotIndex(); buildPool(viewType, selectedVal); renderPoolPanel(); renderTeacherChips(); renderDayCapNote(); renderHomeInfo();
             const sess = globalSchedule.length ? checkSessionRules() : null; renderSessionPanel(sess);
 
             if (!hasData) {
@@ -1644,6 +1808,7 @@
             }
 
             let html = '';
+            const hmap = homeroomMap();
             for (let i = 1; i <= 5; i++) {
                 html += `<tr>`;
                 if (i === 1) html += `<td rowspan="5" class="w-16 min-w-[64px] border-b border-r font-bold text-gray-700 bg-white sticky-col shadow-[1px_0_0_#e3e7f1]" style="writing-mode: vertical-rl">SÁNG</td>`;
@@ -1659,7 +1824,7 @@
                     html += `<td class="border-b border-r p-1.5 align-top drop-zone min-w-[120px] h-[60px]${ec ? ec.cls : ''}${isHole ? ' hole-cell' : ''}${capOff ? (cellData ? ' cap-viol' : ' cap-off') : ''}" data-day="${day}" data-period="s${i}" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">`;
                     if (cellData) {
                         const bgClass = cellData.type === 'hdtn' ? 'bg-subject-hdtn' : 'bg-subject-normal';
-                        const bottomText = viewType === 'class' ? `<i class="fa-solid fa-user-tie mr-1"></i>${esc(cellData.teacher)}` : `<i class="fa-solid fa-users mr-1"></i>Lớp ${esc(cellData.cls)}`;
+                        const bottomText = viewType === 'class' ? `<i class="fa-solid fa-user-tie mr-1"></i>${esc(cellData.teacher)}${hmap.get(cellData.cls) === cellData.teacher ? ' <span class="gvcn-tag" title="Giáo viên chủ nhiệm lớp">CN</span>' : ''}` : `<i class="fa-solid fa-users mr-1"></i>Lớp ${esc(cellData.cls)}`;
                         html += `<div id="${esc(cellData.id)}" class="draggable ${bgClass} rounded p-2 text-left h-full shadow-sm hover:shadow transition border border-transparent hover:border-blue-300" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)"><div class="font-bold text-gray-800 text-xs truncate" title="${esc(cellData.subject)}">${esc(cellData.subject)}</div><div class="text-[11px] text-gray-600 mt-1 truncate">${bottomText}</div><button type="button" class="unplace-btn" title="Gỡ tiết này về danh sách chưa xếp" onclick="event.stopPropagation(); unplaceLesson('${esc(cellData.id)}')"><i class="fa-solid fa-xmark"></i></button></div>`;
                     } else {
                         if (capOff) html += `<div class="cap-off-label" title="Thứ ${day.slice(1)} chỉ xếp tối đa ${getDayCap(day)} tiết">Không xếp</div>`;
@@ -2272,7 +2437,8 @@
             document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
         }
         // ================= NHẬP / XUẤT EXCEL DỮ LIỆU GIÁO VIÊN =================
-        const TEACHER_HEADS = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Môn', 'Lớp', 'Số tiết'];
+        const TEACHER_HEADS = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Môn', 'Lớp', 'Số tiết', 'Lớp chủ nhiệm'];
+        const homeClsOf = t => { const d = (t.duties || []).find(x => x.name === 'GVCN' && x.cls); return d ? normCls(d.cls) : ''; };
         const dutyText = t => (t.duties || []).map(d => `${d.name}: ${d.period}`).join('; ');
         const xCell = (ref, style, v) => (v === '' || v == null) ? xBlank(ref, style) : xStr(ref, style, v);
 
@@ -2281,26 +2447,26 @@
             const out = [];
             teachers.forEach((t, ti) => {
                 const list = (t.teaching || []).length ? t.teaching : [null];
-                list.forEach((tc, k) => out.push({ stt: ti + 1, name: t.name, dept: t.dept || '', duty: k === 0 ? dutyText(t) : '', sub: tc ? tc.sub : '', cls: tc ? tc.cls : '', prd: tc ? Number(tc.prd) : null }));
+                list.forEach((tc, k) => out.push({ stt: ti + 1, name: t.name, dept: t.dept || '', duty: k === 0 ? dutyText(t) : '', home: k === 0 ? homeClsOf(t) : '', sub: tc ? tc.sub : '', cls: tc ? tc.cls : '', prd: tc ? Number(tc.prd) : null }));
             });
             return out;
         }
         function teacherAssignSheetXml(data, selected) {
-            const L = 'ABCDEFG', rows = [`<row r="1" ht="24" customHeight="1">${TEACHER_HEADS.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
+            const L = 'ABCDEFGH', rows = [`<row r="1" ht="24" customHeight="1">${TEACHER_HEADS.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
             data.forEach((d, i) => {
                 const r = i + 2;
-                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, d.stt)}${xCell(`B${r}`, XS.listL, d.name)}${xCell(`C${r}`, XS.listL, d.dept)}${xCell(`D${r}`, XS.listL, d.duty)}${xCell(`E${r}`, XS.listL, d.sub)}${xCell(`F${r}`, XS.listC, d.cls)}${d.prd == null ? xBlank(`G${r}`, XS.listC) : xNum(`G${r}`, XS.listC, d.prd)}</row>`);
+                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, d.stt)}${xCell(`B${r}`, XS.listL, d.name)}${xCell(`C${r}`, XS.listL, d.dept)}${xCell(`D${r}`, XS.listL, d.duty)}${xCell(`E${r}`, XS.listL, d.sub)}${xCell(`F${r}`, XS.listC, d.cls)}${d.prd == null ? xBlank(`G${r}`, XS.listC) : xNum(`G${r}`, XS.listC, d.prd)}${xCell(`H${r}`, XS.listC, d.home || '')}</row>`);
             });
-            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 18, 10, 9], rows, merges: [], dimension: `A1:G${data.length + 1}`, freezeTopRow: true, landscapeFit: false });
+            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 18, 10, 9, 14], rows, merges: [], dimension: `A1:H${data.length + 1}`, freezeTopRow: true, landscapeFit: false });
         }
         function teacherSummarySheetXml(teachers, selected) {
-            const heads = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Tiết kiêm nhiệm', 'Tiết dạy', 'Tổng tiết'], L = 'ABCDEFG';
+            const heads = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Tiết kiêm nhiệm', 'Tiết dạy', 'Tổng tiết', 'Lớp chủ nhiệm'], L = 'ABCDEFGH';
             const rows = [`<row r="1" ht="24" customHeight="1">${heads.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
             teachers.forEach((t, i) => {
                 const r = i + 2;
-                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, i + 1)}${xCell(`B${r}`, XS.listL, t.name)}${xCell(`C${r}`, XS.listL, t.dept || '')}${xCell(`D${r}`, XS.listL, dutyText(t))}${xNum(`E${r}`, XS.listC, round1(t.dutyPeriods))}${xNum(`F${r}`, XS.listC, round1(t.teachPeriods))}${xNum(`G${r}`, XS.listC, round1(t.total))}</row>`);
+                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, i + 1)}${xCell(`B${r}`, XS.listL, t.name)}${xCell(`C${r}`, XS.listL, t.dept || '')}${xCell(`D${r}`, XS.listL, dutyText(t))}${xNum(`E${r}`, XS.listC, round1(t.dutyPeriods))}${xNum(`F${r}`, XS.listC, round1(t.teachPeriods))}${xNum(`G${r}`, XS.listC, round1(t.total))}${xCell(`H${r}`, XS.listC, homeClsOf(t))}</row>`);
             });
-            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 14, 10, 10], rows, merges: [], dimension: `A1:G${teachers.length + 1}`, freezeTopRow: true, landscapeFit: false });
+            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 14, 10, 10, 14], rows, merges: [], dimension: `A1:H${teachers.length + 1}`, freezeTopRow: true, landscapeFit: false });
         }
         function buildTeacherXlsx(teachers) {
             const used = new Set();
@@ -2311,7 +2477,7 @@
         }
         function buildTeacherTemplateXlsx() {
             const demo = [
-                { name: 'Nguyễn Văn A', dept: 'Tổ Toán - Tin', duties: [{ name: 'GVCN', period: 4 }, { name: 'Tổ trưởng', period: 3 }], teaching: [{ sub: 'Toán', cls: '10A1', prd: 4 }, { sub: 'Toán', cls: '10A2', prd: 4 }] },
+                { name: 'Nguyễn Văn A', dept: 'Tổ Toán - Tin', duties: [{ name: 'GVCN', period: 4, cls: '10A1' }, { name: 'Tổ trưởng', period: 3 }], teaching: [{ sub: 'Toán', cls: '10A1', prd: 4 }, { sub: 'Toán', cls: '10A2', prd: 4 }] },
                 { name: 'Trần Thị B', dept: 'Tổ Ngữ văn', duties: [{ name: 'PBT Đoàn', period: 2 }], teaching: [{ sub: 'Ngữ văn', cls: '11A1', prd: 3 }, { sub: 'HĐTN-HN', cls: '11A1', prd: 3 }] }
             ];
             const guide = [
@@ -2321,7 +2487,8 @@
                 '3. Cột Kiêm nhiệm ghi dạng "Tên: số tiết", ngăn cách bằng dấu chấm phẩy. Ví dụ: GVCN: 4; Tổ trưởng: 3; Thư ký HĐ: 1.5',
                 '4. Các tên có sẵn không ghi số tiết sẽ lấy mặc định: GVCN 4, Tổ trưởng 3, Tổ phó 1, BT Đoàn 6, PBT Đoàn 2.',
                 '5. Lớp viết liền, không dấu cách (VD: 10A1). Số tiết là số nguyên dương. Cột STT không bắt buộc.',
-                '6. Xóa 2 dòng mẫu trước khi nhập dữ liệu thật, rồi vào mục "Nhập Excel" trong phần mềm để chọn file này.'
+                '6. Cột "Lớp chủ nhiệm" (không bắt buộc): ghi lớp mà giáo viên làm chủ nhiệm, viết ở dòng đầu của giáo viên đó. VD: 10A1. Dùng cho tùy chọn "GVCN dạy tiết 1 lớp chủ nhiệm". Ghi lớp mà chưa có GVCN trong cột Kiêm nhiệm thì phần mềm tự thêm GVCN.',
+                '7. Xóa 2 dòng mẫu trước khi nhập dữ liệu thật, rồi vào mục "Nhập Excel" trong phần mềm để chọn file này.'
             ];
             const grows = guide.map((t, i) => `<row r="${i + 1}" ht="${i === 0 ? 26 : 22}" customHeight="1">${xStr(`A${i + 1}`, i === 0 ? XS.head : XS.listL, t)}</row>`);
             const used = new Set();
@@ -2434,7 +2601,8 @@
             duty: ['kiem nhiem', 'kn', 'chuc vu', 'cong tac kiem nhiem', 'chuc vu kiem nhiem'],
             subject: ['mon', 'mon hoc', 'mon day', 'mon giang day'],
             cls: ['lop', 'lop day', 'lop phan cong', 'lop giang day'],
-            prd: ['so tiet', 'tiet', 'so tiet tuan', 'so tiet day', 'tiet tuan', 'so tiet phan cong']
+            prd: ['so tiet', 'tiet', 'so tiet tuan', 'so tiet day', 'tiet tuan', 'so tiet phan cong'],
+            home: ['lop chu nhiem', 'lop cn', 'lcn', 'chu nhiem lop', 'lop dang chu nhiem']
         };
         function matchHeader(n) {
             if (!n) return null;
@@ -2481,8 +2649,8 @@
             let last = null, rowCount = 0;
             for (let r = hr + 1; r < grid.length; r++) {
                 const nameRaw = get(r, 'name').replace(/\s+/g, ' '), deptRaw = get(r, 'dept').replace(/\s+/g, ' '), dutyRaw = get(r, 'duty');
-                const sub = get(r, 'subject').replace(/\s+/g, ' '), cls = get(r, 'cls').replace(/\s+/g, '').toUpperCase(), prdRaw = get(r, 'prd');
-                if (![nameRaw, deptRaw, dutyRaw, sub, cls, prdRaw].some(Boolean)) continue;
+                const sub = get(r, 'subject').replace(/\s+/g, ' '), cls = get(r, 'cls').replace(/\s+/g, '').toUpperCase(), prdRaw = get(r, 'prd'), homeRaw = normCls(get(r, 'home'));
+                if (![nameRaw, deptRaw, dutyRaw, sub, cls, prdRaw, homeRaw].some(Boolean)) continue;
                 if (/^tong( cong)?$/.test(normVN(nameRaw))) continue;
                 rowCount++;
                 const name = nameRaw || last;
@@ -2492,6 +2660,7 @@
                 let t = teachers.get(key);
                 if (!t) { t = { name, dept: '', duties: [], teaching: [] }; teachers.set(key, t); }
                 if (deptRaw && !t.dept) t.dept = deptRaw;
+                if (homeRaw && !t.homeCls) t.homeCls = homeRaw;
                 if (dutyRaw) {
                     const { list, bad } = parseDutyText(dutyRaw);
                     list.forEach(d => { if (!t.duties.some(x => x.name.toLowerCase() === d.name.toLowerCase())) t.duties.push(d); });
@@ -2505,7 +2674,18 @@
                     else t.teaching.push({ sub, cls, prd });
                 }
             }
-            return { teachers, warnings, rowCount, hasDutyCol: map.duty !== undefined, hasDeptCol: map.dept !== undefined };
+            // Lớp chủ nhiệm -> gắn vào kiêm nhiệm GVCN (tự thêm nếu chưa có); mỗi lớp chỉ một GVCN
+            const claimed = new Map();
+            teachers.forEach(t => {
+                const hc = t.homeCls; delete t.homeCls;
+                if (!hc) return;
+                if (claimed.has(hc)) { warnings.push(`Lớp ${hc} có hai GVCN (${claimed.get(hc)} và ${t.name}); chỉ giữ ${claimed.get(hc)}.`); return; }
+                claimed.set(hc, t.name);
+                let g = t.duties.find(d => d.name === 'GVCN');
+                if (!g) { g = { name: 'GVCN', period: DUTY_PERIODS.GVCN }; t.duties.push(g); }
+                g.cls = hc;
+            });
+            return { teachers, warnings, rowCount, hasDutyCol: map.duty !== undefined, hasDeptCol: map.dept !== undefined, hasHomeCol: map.home !== undefined };
         }
 
         // ----- Giao diện nhập -----
@@ -2557,7 +2737,7 @@
                 const isOld = existing.has(k);
                 const status = mode === 'replace' ? '<span class="text-blue-700">Thay thế</span>' : isOld ? '<span class="text-amber-700">Cập nhật</span>' : '<span class="text-green-700">Mới</span>';
                 const teach = t.teaching.length ? t.teaching.map(x => `${esc(x.sub)} ${esc(x.cls)} (${x.prd}t)`).join(', ') : `<span class="text-gray-400 italic">${isOld && mode !== 'replace' ? 'giữ phân công hiện có' : 'chưa có phân công dạy'}</span>`;
-                return `<tr class="border-b"><td class="p-2 font-semibold">${esc(t.name)}</td><td class="p-2 text-xs">${esc(t.dept || '')}</td><td class="p-2 text-xs">${esc(t.duties.map(d => `${d.name} (+${d.period})`).join(', '))}</td><td class="p-2 text-xs">${teach}</td><td class="p-2 text-xs font-semibold whitespace-nowrap">${status}</td></tr>`;
+                return `<tr class="border-b"><td class="p-2 font-semibold">${esc(t.name)}</td><td class="p-2 text-xs">${esc(t.dept || '')}</td><td class="p-2 text-xs">${esc(t.duties.map(d => `${d.name}${d.cls ? ' ' + d.cls : ''} (+${d.period})`).join(', '))}</td><td class="p-2 text-xs">${teach}</td><td class="p-2 text-xs font-semibold whitespace-nowrap">${status}</td></tr>`;
             }).join('');
             $('import-result').innerHTML = `
                 <div class="text-xs text-gray-500 mb-2"><i class="fa-solid fa-file-excel mr-1 text-green-600"></i>${esc(P.fileName)} - trang "${esc(P.sheetName)}"</div>
@@ -2595,7 +2775,13 @@
                 if (ex) {
                     if (it.teaching.length) ex.teaching = it.teaching.map(x => ({ ...x }));
                     if (P.hasDeptCol && it.dept) ex.dept = it.dept;
-                    if (P.hasDutyCol) ex.duties = it.duties.map(d => ({ ...d }));
+                    if (P.hasDutyCol || P.hasHomeCol) {
+                        const oldCls = ((ex.duties || []).find(d => d.name === 'GVCN') || {}).cls;
+                        const keep = !P.hasDutyCol ? (ex.duties || []).filter(d => !it.duties.some(x => x.name === d.name)) : [];
+                        ex.duties = it.duties.map(d => ({ ...d })).concat(keep.map(d => ({ ...d })));
+                        const g = ex.duties.find(d => d.name === 'GVCN');
+                        if (g && !g.cls && oldCls && !P.hasHomeCol) g.cls = oldCls;
+                    }
                     recalc(ex); updated++;
                 } else {
                     const t = { id: nextId(), name: it.name, dept: it.dept || 'Chưa phân tổ', duties: it.duties.map(d => ({ ...d })), teaching: it.teaching.map(x => ({ ...x })), teachPeriods: 0, dutyPeriods: 0, total: 0 };
@@ -2655,7 +2841,7 @@
         function mockData() {
             cancelEdit(true);
             dbTeachers = [
-                { id: 1, name: "Thầy Toán 1", dept: "Tổ Toán - Tin", duties: [{ name: "GVCN", period: 4 }], teaching: [{ sub: "Toán", cls: "10A1", prd: 4 }, { sub: "Toán", cls: "10A2", prd: 4 }], teachPeriods: 8, dutyPeriods: 4, total: 12 },
+                { id: 1, name: "Thầy Toán 1", dept: "Tổ Toán - Tin", duties: [{ name: "GVCN", period: 4, cls: "10A1" }], teaching: [{ sub: "Toán", cls: "10A1", prd: 4 }, { sub: "Toán", cls: "10A2", prd: 4 }], teachPeriods: 8, dutyPeriods: 4, total: 12 },
                 { id: 2, name: "Cô Văn 1", dept: "Tổ Ngữ văn", duties: [{ name: "Bí thư Đoàn", period: 6 }], teaching: [{ sub: "Ngữ văn", cls: "10A1", prd: 4 }, { sub: "Ngữ văn", cls: "10A2", prd: 4 }, { sub: "HĐTN-HN", cls: "10A1", prd: 2 }], teachPeriods: 10, dutyPeriods: 6, total: 16 },
                 { id: 3, name: "Thầy Anh 1", dept: "Tổ Ngoại ngữ", duties: [], teaching: [{ sub: "Tiếng Anh", cls: "10A1", prd: 3 }, { sub: "Tiếng Anh", cls: "10A2", prd: 3 }], teachPeriods: 6, dutyPeriods: 0, total: 6 },
                 { id: 4, name: "Cô Lý 1", dept: "Tổ Lý - Hóa - Sinh", duties: [{ name: "Tổ phó", period: 1 }], teaching: [{ sub: "Vật lý", cls: "10A1", prd: 2 }, { sub: "Vật lý", cls: "10A2", prd: 2 }], teachPeriods: 4, dutyPeriods: 1, total: 5 }
@@ -2667,7 +2853,7 @@
 
         // --- HỆ THỐNG KIỂM TRA DÙNG THỬ ---
         const MAX_TRIAL = 10;
-        const ACTIVATION_KEY = "tienhuong28011981";
+        const ACTIVATION_KEY = "tienhuong28011981@";
 
         function checkTrialStatus() {
             // Kiểm tra xem đã kích hoạt vĩnh viễn chưa
@@ -2715,7 +2901,7 @@
         function initApp() {
             loadDataFromStorage();
             ensureSubjectDatalist();
-            loadDayCaps(); renderDayCapPanel();
+            loadDayCaps(); renderDayCapPanel(); loadHomeOpt();
             renderDepartments();
             renderDutyRows();
             if ($('teaching_container').children.length === 0) addTeachingRow();
