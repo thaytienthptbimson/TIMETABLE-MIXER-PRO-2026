@@ -201,7 +201,7 @@
                                 <option value="3">Tối đa 3 tiết/buổi</option>
                                 <option value="4">Tối đa 4 tiết/buổi</option>
                             </select>
-                            <p class="text-[11px] text-gray-500 mt-1 leading-tight">Khi xếp TKB (tự động, xếp gọn, kéo thả), giáo viên này không bị xếp quá số tiết đã chọn trong cùng một buổi (một ngày).</p>
+                            <p class="text-[11px] text-gray-500 mt-1 leading-tight">Khi xếp TKB (tự động, xếp gọn, kéo thả), giáo viên này không bị xếp quá số tiết đã chọn trong cùng một buổi (một ngày). Muốn đặt chung cho tất cả giáo viên, dùng ô "Số tiết tối đa trong 1 buổi cho tất cả GV" phía trên bảng Danh sách Phân công.</p>
                         </div>
                     </div>
 
@@ -255,6 +255,24 @@
                             <i class="fa-solid fa-trash mr-1"></i>Xóa Hệ thống
                         </button>
                     </div>
+                </div>
+                <div id="capall-panel" class="mb-4 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <label for="capall-select" class="text-sm font-semibold text-indigo-900 flex items-center"><i class="fa-solid fa-hourglass-half mr-2"></i>Số tiết tối đa trong 1 buổi cho tất cả GV</label>
+                        <select id="capall-select" class="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white">
+                            <option value="0">Không giới hạn</option>
+                            <option value="1">Tối đa 1 tiết/buổi</option>
+                            <option value="2">Tối đa 2 tiết/buổi</option>
+                            <option value="3">Tối đa 3 tiết/buổi</option>
+                            <option value="4">Tối đa 4 tiết/buổi</option>
+                        </select>
+                        <button type="button" id="btn-capall" onclick="applyCapToAll()" class="text-sm font-semibold bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" title="Đặt cùng một mức tiết tối đa/buổi cho toàn bộ giáo viên">
+                            <i class="fa-solid fa-users mr-1"></i>Áp dụng cho tất cả
+                        </button>
+                    </div>
+                    <p id="capall-info" class="text-[11px] text-indigo-900/80 mt-2 leading-snug"></p>
+                    <p class="text-[11px] text-gray-500 mt-1 leading-snug">Mức này được áp dụng cho toàn bộ giáo viên (ghi đè mức riêng đã đặt). Vẫn có thể chỉnh riêng từng giáo viên bằng nút sửa ở bảng bên dưới.</p>
+                    <div id="capall-warn" class="hidden mt-2 text-xs rounded-md border border-amber-200 bg-amber-50 text-amber-900 p-2 leading-relaxed"></div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full border-collapse text-sm">
@@ -396,7 +414,7 @@
                     <h3 class="font-bold text-gray-800 mb-2 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-calendar-day mr-2"></i>Số tiết tối đa theo ngày</h3>
                     <div id="daycap-grid" class="grid grid-cols-6 gap-1.5"></div>
                     <button type="button" onclick="setMondayCap(4)" class="mt-3 w-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg py-1.5 hover:bg-blue-100 transition"><i class="fa-solid fa-thumbtack mr-1"></i>Ấn định Thứ 2 tối đa 4 tiết</button>
-                    <p class="text-[11px] text-gray-500 mt-2 leading-snug">Ô vượt mức bị khóa (không xếp được). Áp dụng cho xếp tự động, xếp thủ công và kiểm tra. Chọn 5 để bỏ giới hạn. Giới hạn riêng cho từng giáo viên (số tiết tối đa/buổi) đặt ở mục Nhập dữ liệu, phần Thông tin chung.</p>
+                    <p class="text-[11px] text-gray-500 mt-2 leading-snug">Ô vượt mức bị khóa (không xếp được). Áp dụng cho xếp tự động, xếp thủ công và kiểm tra. Chọn 5 để bỏ giới hạn. Giới hạn cho giáo viên (số tiết tối đa/buổi) đặt ở mục Nhập dữ liệu: riêng từng người ở phần Thông tin chung, hoặc chung cho tất cả ở ô phía trên Danh sách Phân công.</p>
                     <div id="daycap-note" class="hidden mt-2 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-2 leading-relaxed"></div>
                 </div>
 
@@ -664,6 +682,57 @@
             if (over) s += ` TKB hiện tại có ${over} buổi của GV này vượt mức tối đa, hãy xếp lại hoặc chỉnh tay.`;
             return s;
         }
+        // ----- Áp dụng số tiết tối đa/buổi cho TẤT CẢ giáo viên -----
+        const capLabel = c => c ? `tối đa ${c} tiết/buổi` : 'không giới hạn số tiết/buổi';
+        // Cảnh báo tổng hợp: GV không đủ chỗ xếp hết tiết trong tuần, và các buổi trong TKB hiện tại đang vượt mức
+        function capAllWarnings() {
+            const caps = teacherCapMap(), tight = [];
+            dbTeachers.forEach(t => {
+                const c = normCap(t.maxPerSession); if (!c) return;
+                const room = DAYS.reduce((a, d) => a + Math.min(c, getDayCap(d)), 0);
+                if ((t.teachPeriods || 0) > room) tight.push({ name: t.name, need: t.teachPeriods, room });
+            });
+            const cnt = new Map();
+            globalSchedule.forEach(x => { if (caps.has(x.teacher)) { const k = `${x.day}|${x.teacher}`; cnt.set(k, (cnt.get(k) || 0) + 1); } });
+            let overDays = 0; const overT = new Set();
+            cnt.forEach((n, k) => { const name = k.slice(k.indexOf('|') + 1); if (n > caps.get(name)) { overDays++; overT.add(name); } });
+            return { tight, overDays, overTeachers: overT.size };
+        }
+        function renderCapAllPanel() {
+            const sel = $('capall-select'), info = $('capall-info'), warn = $('capall-warn'), btn = $('btn-capall');
+            if (!sel || !info || !warn) return;
+            const n = dbTeachers.length, caps = dbTeachers.map(t => normCap(t.maxPerSession));
+            if (btn) btn.disabled = !n;
+            if (!n) { info.textContent = 'Chưa có giáo viên nào.'; warn.classList.add('hidden'); return; }
+            const dist = new Map(); caps.forEach(c => dist.set(c, (dist.get(c) || 0) + 1));
+            if (dist.size === 1) {
+                const c = caps[0]; sel.value = String(c);
+                info.textContent = c ? `Hiện tại: cả ${n} GV đều ${capLabel(c)}.` : `Hiện tại: chưa giới hạn số tiết/buổi cho giáo viên nào.`;
+            } else {
+                info.textContent = 'Hiện tại: ' + Array.from(dist.keys()).sort((a, b) => (a || 99) - (b || 99)).map(c => `${dist.get(c)} GV ${capLabel(c)}`).join(' · ') + '.';
+            }
+            const w = capAllWarnings(), parts = [];
+            if (w.tight.length) parts.push(`<div><b>${w.tight.length} GV</b> dạy nhiều tiết hơn số chỗ xếp được trong tuần với mức đã đặt: ${w.tight.slice(0, 5).map(x => `${esc(x.name)} (${esc(x.need)} tiết, chỉ xếp được ${esc(x.room)})`).join('; ')}${w.tight.length > 5 ? '...' : ''}. Hãy tăng mức tối đa/buổi cho các GV này.</div>`);
+            if (w.overDays) parts.push(`<div>TKB hiện tại có <b>${w.overDays} buổi</b> của ${w.overTeachers} GV đang vượt mức tối đa. Hãy xếp lại TKB hoặc chỉnh tay.</div>`);
+            warn.innerHTML = `<div class="flex gap-2"><i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i><div class="space-y-1">${parts.join('')}</div></div>`;
+            warn.classList.toggle('hidden', !parts.length);
+        }
+        function applyCapToAll() {
+            const n = dbTeachers.length;
+            if (!n) return showToast("Chưa có giáo viên nào để áp dụng.", "error");
+            const c = normCap($('capall-select').value);
+            const diff = dbTeachers.filter(t => normCap(t.maxPerSession) !== c);
+            if (!diff.length) return showToast(`Cả ${n} giáo viên đã ở mức ${capLabel(c)}.`, "success");
+            const custom = diff.filter(t => normCap(t.maxPerSession)).length;
+            if (!confirm(`Áp dụng mức "${capLabel(c)}" cho tất cả ${n} giáo viên?` + (custom ? `\n\n${custom} GV đang có mức riêng khác sẽ bị ghi đè.` : ''))) return;
+            dbTeachers.forEach(t => { t.maxPerSession = c; });
+            // Đang mở form sửa 1 GV: đồng bộ ô chọn để lúc bấm Lưu không ghi đè lại mức cũ
+            if (editingId !== null && $('gv_maxs')) $('gv_maxs').value = String(c);
+            saveDataToStorage(); renderTeachersTable();
+            const w = capAllWarnings(), bad = w.tight.length + (w.overDays ? 1 : 0);
+            showToast(`Đã áp dụng ${capLabel(c)} cho ${n} giáo viên.` + (bad ? ' Có cảnh báo, xem ở khung phía trên bảng.' : ''), "success");
+        }
+
         function loadDayCaps() {
             try { const raw = localStorage.getItem('tkb_daycaps'); dayCaps = raw ? JSON.parse(raw) : { ...DEFAULT_DAY_CAPS }; } catch (e) { dayCaps = { ...DEFAULT_DAY_CAPS }; }
         }
@@ -973,6 +1042,7 @@
         }
 
         function renderDataSummary() {
+            renderCapAllPanel();
             const el = $('data-summary');
             if (!el) return;
             const classes = new Set(); let needed = 0;
