@@ -698,6 +698,76 @@
             cnt.forEach((n, k) => { const name = k.slice(k.indexOf('|') + 1); if (n > caps.get(name)) { overDays++; overT.add(name); } });
             return { tight, overDays, overTeachers: overT.size };
         }
+        // Danh sách (GV, ngày) đang dạy vượt mức. capOf(tên GV) trả về mức cần kiểm (0 = không giới hạn)
+        function overCapDays(capOf) {
+            const cnt = new Map(), out = [];
+            globalSchedule.forEach(x => { const k = `${x.day}|${x.teacher}`; cnt.set(k, (cnt.get(k) || 0) + 1); });
+            cnt.forEach((n, k) => { const i = k.indexOf('|'), teacher = k.slice(i + 1), c = capOf(teacher); if (c && n > c) out.push({ day: k.slice(0, i), teacher, n, over: n - c }); });
+            return out;
+        }
+        // Sửa TKB hiện có để GV không dạy quá mức tối đa/buổi: hoán đổi 2 tiết trong CÙNG MỘT LỚP (tập ô của lớp không đổi nên khung buổi học của lớp được giữ),
+        // chỉ chấp nhận khi không gây trùng lịch GV, không làm GV nào vượt mức. Trả về số buổi vượt mức trước và sau khi sửa.
+        function repairCapViolations(budgetMs) {
+            const caps = teacherCapMap(), capOf = n => caps.get(n) || 0;
+            const before = overCapDays(capOf).length; if (!before) return { before: 0, after: 0, swaps: 0 };
+            const tAt = new Map(), cnt = new Map(), byCls = new Map();
+            const tk = (t, d, p) => `${t}|${d}|${p}`, dk = (t, d) => `${t}|${d}`;
+            globalSchedule.forEach(x => {
+                tAt.set(tk(x.teacher, x.day, x.period), x); cnt.set(dk(x.teacher, x.day), (cnt.get(dk(x.teacher, x.day)) || 0) + 1);
+                if (!byCls.has(x.cls)) byCls.set(x.cls, []); byCls.get(x.cls).push(x);
+            });
+            const t0 = performance.now(); let swaps = 0, progress = true;
+            const apply = (L, M) => {
+                const dL = L.day, pL = L.period, dM = M.day, pM = M.period;
+                tAt.delete(tk(L.teacher, dL, pL)); tAt.delete(tk(M.teacher, dM, pM));
+                cnt.set(dk(L.teacher, dL), cnt.get(dk(L.teacher, dL)) - 1); cnt.set(dk(M.teacher, dM), cnt.get(dk(M.teacher, dM)) - 1);
+                L.day = dM; L.period = pM; M.day = dL; M.period = pL;
+                tAt.set(tk(L.teacher, L.day, L.period), L); tAt.set(tk(M.teacher, M.day, M.period), M);
+                cnt.set(dk(L.teacher, L.day), (cnt.get(dk(L.teacher, L.day)) || 0) + 1); cnt.set(dk(M.teacher, M.day), (cnt.get(dk(M.teacher, M.day)) || 0) + 1);
+            };
+            // M đổi chỗ với L hợp lệ không? (L đang ở ngày vượt mức, M cùng lớp ở ngày khác)
+            const okSwap = (L, M) => {
+                if (M === L || M.day === L.day || M.teacher === L.teacher) return false;
+                if (tAt.has(tk(L.teacher, M.day, M.period)) || tAt.has(tk(M.teacher, L.day, L.period))) return false;
+                const cL = capOf(L.teacher), cM = capOf(M.teacher);
+                if (cL && (cnt.get(dk(L.teacher, M.day)) || 0) + 1 > cL) return false;
+                if (cM && (cnt.get(dk(M.teacher, L.day)) || 0) + 1 > cM) return false;
+                return true;
+            };
+            // Chi phí trống tiết giữa buổi của 1 GV trong 1 ngày: trống 1 tiết nhẹ, từ 2 tiết liền nặng (để chọn phép đổi ít làm rối lịch GV nhất)
+            const gapCost = (t, d) => {
+                const used = PERIODS.map(pp => tAt.has(tk(t, d, pp))), first = used.indexOf(true), last = used.lastIndexOf(true); let c = 0;
+                for (let k = first + 1; first >= 0 && k < last; k++) { if (used[k]) continue; let e = k; while (!used[e + 1]) e++; c += e - k + 1 >= 2 ? 10 * (e - k + 1) : 1; k = e; }
+                return c;
+            };
+            const swapCost = (L, M) => {
+                const ks = [[L.teacher, L.day], [L.teacher, M.day], [M.teacher, M.day], [M.teacher, L.day]];
+                const cost = () => ks.reduce((a, [t, d]) => a + gapCost(t, d), 0);
+                const c0 = cost(); apply(L, M); const c1 = cost(); apply(L, M);
+                return c1 - c0;
+            };
+            while (progress && performance.now() - t0 < (budgetMs || 1500)) {
+                progress = false;
+                const bad = overCapDays(capOf).sort(() => Math.random() - 0.5);
+                for (const b of bad) {
+                    let guard = (cnt.get(dk(b.teacher, b.day)) || 0) - capOf(b.teacher);
+                    while (guard-- > 0) {
+                        const mine = globalSchedule.filter(x => x.teacher === b.teacher && x.day === b.day).sort(() => Math.random() - 0.5);
+                        let done = false;
+                        for (const L of mine) {
+                            const cands = (byCls.get(L.cls) || []).filter(M => okSwap(L, M));
+                            if (!cands.length) continue;
+                            // Ưu tiên phép đổi ít gây trống tiết nhất, rồi đến ngày GV đang dạy ít tiết nhất để dàn đều
+                            const scored = cands.map(M => ({ M, g: swapCost(L, M), n: cnt.get(dk(L.teacher, M.day)) || 0, r: Math.random() }));
+                            scored.sort((a, c) => a.g - c.g || a.n - c.n || a.r - c.r);
+                            apply(L, scored[0].M); swaps++; done = progress = true; break;
+                        }
+                        if (!done) break;
+                    }
+                }
+            }
+            return { before, after: overCapDays(capOf).length, swaps };
+        }
         function renderCapAllPanel() {
             const sel = $('capall-select'), info = $('capall-info'), warn = $('capall-warn'), btn = $('btn-capall');
             if (!sel || !info || !warn) return;
@@ -713,7 +783,7 @@
             }
             const w = capAllWarnings(), parts = [];
             if (w.tight.length) parts.push(`<div><b>${w.tight.length} GV</b> dạy nhiều tiết hơn số chỗ xếp được trong tuần với mức đã đặt: ${w.tight.slice(0, 5).map(x => `${esc(x.name)} (${esc(x.need)} tiết, chỉ xếp được ${esc(x.room)})`).join('; ')}${w.tight.length > 5 ? '...' : ''}. Hãy tăng mức tối đa/buổi cho các GV này.</div>`);
-            if (w.overDays) parts.push(`<div>TKB hiện tại có <b>${w.overDays} buổi</b> của ${w.overTeachers} GV đang vượt mức tối đa. Hãy xếp lại TKB hoặc chỉnh tay.</div>`);
+            if (w.overDays) parts.push(`<div>TKB hiện tại có <b>${w.overDays} buổi</b> của ${w.overTeachers} GV đang vượt mức tối đa. Bấm "Áp dụng cho tất cả" để tự chỉnh lại TKB, hoặc "Xếp TKB từ dữ liệu này" để xếp lại.</div>`);
             warn.innerHTML = `<div class="flex gap-2"><i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i><div class="space-y-1">${parts.join('')}</div></div>`;
             warn.classList.toggle('hidden', !parts.length);
         }
@@ -722,15 +792,25 @@
             if (!n) return showToast("Chưa có giáo viên nào để áp dụng.", "error");
             const c = normCap($('capall-select').value);
             const diff = dbTeachers.filter(t => normCap(t.maxPerSession) !== c);
-            if (!diff.length) return showToast(`Cả ${n} giáo viên đã ở mức ${capLabel(c)}.`, "success");
+            // Số buổi trong TKB hiện có mà GV đang dạy vượt mức mới
+            const viol = c && globalSchedule.length ? overCapDays(() => c).length : 0;
+            if (!diff.length && !viol) return showToast(`Cả ${n} giáo viên đã ở mức ${capLabel(c)}.`, "success");
             const custom = diff.filter(t => normCap(t.maxPerSession)).length;
-            if (!confirm(`Áp dụng mức "${capLabel(c)}" cho tất cả ${n} giáo viên?` + (custom ? `\n\n${custom} GV đang có mức riêng khác sẽ bị ghi đè.` : ''))) return;
+            let msg = diff.length ? `Áp dụng mức "${capLabel(c)}" cho tất cả ${n} giáo viên?` + (custom ? `\n\n${custom} GV đang có mức riêng khác sẽ bị ghi đè.` : '') : `Cả ${n} giáo viên đã ở mức ${capLabel(c)}, nhưng TKB hiện tại vẫn còn buổi dạy vượt mức. Chỉnh lại TKB ngay?`;
+            if (viol) msg += `\n\nTKB hiện tại có ${viol} buổi giáo viên dạy vượt mức này. App sẽ tự hoán đổi tiết trong từng lớp để sửa (không làm trùng lịch).`;
+            if (!confirm(msg)) return;
             dbTeachers.forEach(t => { t.maxPerSession = c; });
             // Đang mở form sửa 1 GV: đồng bộ ô chọn để lúc bấm Lưu không ghi đè lại mức cũ
             if (editingId !== null && $('gv_maxs')) $('gv_maxs').value = String(c);
+            let fixNote = '';
+            if (viol) {
+                const r = repairCapViolations(2000);
+                resetCompactState(); poolSel = null; freeSlotSel = null; syncReportWithSchedule();
+                fixNote = r.after ? ` Đã sửa ${r.before - r.after}/${r.before} buổi vượt mức, còn ${r.after} buổi chưa sửa được, hãy bấm "Xếp TKB từ dữ liệu này" để xếp lại.` : ` Đã chỉnh TKB: sửa xong ${r.before} buổi vượt mức.`;
+            }
             saveDataToStorage(); renderTeachersTable();
             const w = capAllWarnings(), bad = w.tight.length + (w.overDays ? 1 : 0);
-            showToast(`Đã áp dụng ${capLabel(c)} cho ${n} giáo viên.` + (bad ? ' Có cảnh báo, xem ở khung phía trên bảng.' : ''), "success");
+            showToast(`Đã áp dụng ${capLabel(c)} cho ${n} giáo viên.` + fixNote + (!fixNote && bad ? ' Có cảnh báo, xem ở khung phía trên bảng.' : ''), bad && fixNote && w.overDays ? "error" : "success");
         }
 
         function loadDayCaps() {
