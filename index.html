@@ -192,6 +192,17 @@
                                 <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
+                        <div class="mt-3">
+                            <label for="gv_maxs" class="block text-xs font-semibold text-gray-600 mb-1"><i class="fa-solid fa-hourglass-half mr-1"></i>Số tiết tối đa trong 1 buổi</label>
+                            <select id="gv_maxs" class="w-full border border-gray-300 rounded px-3 py-2 focus:ring-blue-500">
+                                <option value="0">Không giới hạn</option>
+                                <option value="1">Tối đa 1 tiết/buổi</option>
+                                <option value="2">Tối đa 2 tiết/buổi</option>
+                                <option value="3">Tối đa 3 tiết/buổi</option>
+                                <option value="4">Tối đa 4 tiết/buổi</option>
+                            </select>
+                            <p class="text-[11px] text-gray-500 mt-1 leading-tight">Khi xếp TKB (tự động, xếp gọn, kéo thả), giáo viên này không bị xếp quá số tiết đã chọn trong cùng một buổi (một ngày).</p>
+                        </div>
                     </div>
 
                     <div class="mb-5 border-b pb-4">
@@ -385,7 +396,7 @@
                     <h3 class="font-bold text-gray-800 mb-2 text-sm uppercase tracking-wider text-gray-500"><i class="fa-solid fa-calendar-day mr-2"></i>Số tiết tối đa theo ngày</h3>
                     <div id="daycap-grid" class="grid grid-cols-6 gap-1.5"></div>
                     <button type="button" onclick="setMondayCap(4)" class="mt-3 w-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg py-1.5 hover:bg-blue-100 transition"><i class="fa-solid fa-thumbtack mr-1"></i>Ấn định Thứ 2 tối đa 4 tiết</button>
-                    <p class="text-[11px] text-gray-500 mt-2 leading-snug">Ô vượt mức bị khóa (không xếp được). Áp dụng cho xếp tự động, xếp thủ công và kiểm tra. Chọn 5 để bỏ giới hạn.</p>
+                    <p class="text-[11px] text-gray-500 mt-2 leading-snug">Ô vượt mức bị khóa (không xếp được). Áp dụng cho xếp tự động, xếp thủ công và kiểm tra. Chọn 5 để bỏ giới hạn. Giới hạn riêng cho từng giáo viên (số tiết tối đa/buổi) đặt ở mục Nhập dữ liệu, phần Thông tin chung.</p>
                     <div id="daycap-note" class="hidden mt-2 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-2 leading-relaxed"></div>
                 </div>
 
@@ -638,6 +649,21 @@
         function getDayCap(d) { const v = parseInt(dayCaps[d]); return v >= 1 && v <= PERIODS.length ? v : PERIODS.length; }
         function slotAllowed(d, p) { return PERIODS.indexOf(p) < getDayCap(d); }
         function slotCount() { return DAYS.reduce((a, d) => a + getDayCap(d), 0); }
+        // ----- Số tiết tối đa trong 1 buổi của từng giáo viên (0 = không giới hạn) -----
+        function normCap(v) { const n = parseInt(v); return n >= 1 && n < PERIODS.length ? n : 0; }
+        function teacherCapMap() { const m = new Map(); dbTeachers.forEach(t => { const c = normCap(t.maxPerSession); if (c) m.set(t.name, c); }); return m; }
+        function teacherCap(name) { const t = dbTeachers.find(x => x.name === name); return t ? normCap(t.maxPerSession) : 0; }
+        function teacherDayCount(name, d, ignoreIds) { let n = 0; globalSchedule.forEach(x => { if (x.teacher === name && x.day === d && !(ignoreIds && ignoreIds.has(x.id))) n++; }); return n; }
+        // Cảnh báo sau khi lưu GV: số tiết/tuần có xếp nổi không và TKB hiện tại có buổi nào vượt mức không
+        function capWarnText(t) {
+            const c = normCap(t.maxPerSession); if (!c) return '';
+            let s = '';
+            const room = DAYS.reduce((a, d) => a + Math.min(c, getDayCap(d)), 0);
+            if ((t.teachPeriods || 0) > room) s += ` Cảnh báo: GV dạy ${t.teachPeriods} tiết/tuần nhưng với mức tối đa ${c} tiết/buổi chỉ xếp được ${room} tiết trong tuần.`;
+            const over = DAYS.filter(d => teacherDayCount(t.name, d) > c).length;
+            if (over) s += ` TKB hiện tại có ${over} buổi của GV này vượt mức tối đa, hãy xếp lại hoặc chỉnh tay.`;
+            return s;
+        }
         function loadDayCaps() {
             try { const raw = localStorage.getItem('tkb_daycaps'); dayCaps = raw ? JSON.parse(raw) : { ...DEFAULT_DAY_CAPS }; } catch (e) { dayCaps = { ...DEFAULT_DAY_CAPS }; }
         }
@@ -840,6 +866,7 @@
             const sel = $('gv_dept');
             if (t.dept && !Array.from(sel.options).some(o => o.value === t.dept)) sel.add(new Option(t.dept, t.dept));
             sel.value = t.dept;
+            { const m = normCap(t.maxPerSession); $('gv_maxs').value = String(m); }
             (t.duties || []).forEach(d => {
                 const row = Array.from(document.querySelectorAll('#duty_container .duty-row')).find(r => r.dataset.key === d.name);
                 if (row) { row.querySelector('input[type=checkbox]').checked = true; row.querySelector('.duty-prd').value = d.period; const c = row.querySelector('.duty-cls'); if (c) c.value = d.cls || ''; }
@@ -893,23 +920,24 @@
             const homeNote = hc && !teaching.some(x => normCls(x.cls) === hc.cls) ? ` Lưu ý: GV chưa dạy tiết nào ở lớp ${hc.cls} nên tùy chọn "GVCN dạy tiết 1" chưa áp dụng được.` : '';
             const dutyPeriods = round1(duties.reduce((a, d) => a + d.period, 0));
             const total = round1(teachPeriods + dutyPeriods);
+            const maxPerSession = normCap($('gv_maxs').value);
 
             if (editingId !== null) {
                 const t = dbTeachers.find(x => x.id === editingId);
                 if (!t) { cancelEdit(true); return showToast("Không tìm thấy giáo viên cần sửa.", "error"); }
                 const oldName = t.name;
-                Object.assign(t, { name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total });
+                Object.assign(t, { name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total, maxPerSession });
                 const removed = reconcileSchedule(oldName, t);
                 if (removed) lastReport = null;
                 poolSel = null; freeTeacher = '';
                 saveDataToStorage(); cancelEdit(true); renderTeachersTable(); renderScheduleReport();
-                return showToast((removed ? `Đã cập nhật. ${removed} tiết bị gỡ khỏi TKB vì phân công thay đổi, hãy xếp lại ở mục "Tiết cần xếp".` : "Đã cập nhật thông tin giáo viên!") + homeNote, "success");
+                return showToast((removed ? `Đã cập nhật. ${removed} tiết bị gỡ khỏi TKB vì phân công thay đổi, hãy xếp lại ở mục "Tiết cần xếp".` : "Đã cập nhật thông tin giáo viên!") + homeNote + capWarnText(t), "success");
             }
 
-            dbTeachers.push({ id: Date.now(), name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total });
+            const nt = { id: Date.now(), name, dept: $('gv_dept').value, duties, teaching, teachPeriods, dutyPeriods, total, maxPerSession }; dbTeachers.push(nt);
             saveDataToStorage(); renderTeachersTable();
             resetTeacherForm();
-            showToast("Lưu Dữ liệu thành công!" + homeNote, "success");
+            showToast("Lưu Dữ liệu thành công!" + homeNote + capWarnText(nt), "success");
         }
 
         function deleteTeacher(id) {
@@ -933,7 +961,7 @@
                     const teaching = (t.teaching || []).map(tc => `<div class="mb-1 text-xs"><b>${esc(tc.sub)}</b> <i class="fa-solid fa-arrow-right text-[9px] mx-1 text-gray-400"></i> Lớp ${esc(tc.cls)} <span class="text-gray-500">(${esc(tc.prd)}t)</span></div>`).join('') || '<span class="text-gray-400 italic text-xs">Chưa có tiết dạy</span>';
                     return `
                     <tr class="border-b hover:bg-blue-50 transition${t.id === editingId ? ' bg-yellow-50' : ''}">
-                        <td class="border p-2"><b>${esc(t.name)}</b><br><span class="text-[11px] text-gray-500">${esc(t.dept)}</span></td>
+                        <td class="border p-2"><b>${esc(t.name)}</b><br><span class="text-[11px] text-gray-500">${esc(t.dept)}</span>${normCap(t.maxPerSession) ? `<br><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 inline-block mt-1" title="Giới hạn số tiết trong 1 buổi khi xếp TKB"><i class="fa-solid fa-hourglass-half mr-1"></i>Tối đa ${normCap(t.maxPerSession)} tiết/buổi</span>` : ''}</td>
                         <td class="border p-2 align-top">${duties}</td>
                         <td class="border p-2 align-top">${teaching}</td>
                         <td class="border p-2 text-center"><div class="font-bold text-lg ${colorClass}">${esc(t.total)}</div><div class="text-[10px] text-gray-500 bg-gray-100 rounded px-1 mt-1 inline-block border">Dạy: ${esc(t.teachPeriods)} | KN: ${esc(t.dutyPeriods)}</div></td>
@@ -1102,6 +1130,8 @@
             lessons.forEach(l => { cls.set(l.cls, (cls.get(l.cls) || 0) + 1); tch.set(l.teacher, (tch.get(l.teacher) || 0) + 1); });
             cls.forEach((n, c) => { if (n > cap) warnings.push(`Lớp ${c} có ${n} tiết/tuần, nhiều hơn ${cap} ô của lưới.`); });
             tch.forEach((n, t) => { if (n > cap) warnings.push(`${t} dạy ${n} tiết/tuần, nhiều hơn ${cap} ô của lưới.`); });
+            const capMap0 = teacherCapMap();
+            tch.forEach((n, t) => { const c = capMap0.get(t); if (!c) return; const room = DAYS.reduce((a, d) => a + Math.min(c, getDayCap(d)), 0); if (n > room) warnings.push(`${t} dạy ${n} tiết/tuần nhưng chỉ xếp tối đa ${c} tiết/buổi nên nhiều nhất xếp được ${room} tiết trong tuần.`); });
             const plan = buildGradePlans(cls);
             if (opts && opts.pack) warnings.push(...plan.warnings);
             return { warnings, clsCount: cls, tchCount: tch, plan };
@@ -1110,7 +1140,7 @@
         // Xếp theo khung buổi học: mỗi lớp lấp đầy các ô liền từ tiết 1, chỉ cần hoán đổi tiết trong lớp để hết trùng GV
         function attemptPacked(baseLessons, opts, info) {
             const nD = DAYS.length, nP = PERIODS.length, nS = nD * nP;
-            const W_CLASH = 1000, W_OFF = 8, W_SUBJ = 6, W_CONSEC = 30, W_TDAY = 1, W_GAP1 = 12, W_GAP2 = 300;
+            const W_CLASH = 1000, W_OFF = 8, W_SUBJ = 6, W_CONSEC = 30, W_TDAY = 1, W_GAP1 = 12, W_GAP2 = 300, W_CAP = 1000;
             // Chi phí GV trống tiết giữa buổi theo mặt nạ các tiết đang dạy trong ngày (bit = tiết): trống 1 tiết nhẹ, từ 2 tiết liền rất nặng
             const gapTable = new Int16Array(1 << nP), gapN1 = new Uint8Array(1 << nP), gapN2 = new Uint8Array(1 << nP);
             for (let m = 1; m < (1 << nP); m++) {
@@ -1131,6 +1161,7 @@
                 if (!sIdx.has(l.subject)) sIdx.set(l.subject, sIdx.size);
             });
             const nT = tIdx.size, nC = cIdx.size, nSub = sIdx.size, nL = baseLessons.length;
+            const capMap = teacherCapMap(), tCap = new Int8Array(nT); tIdx.forEach((i, name) => { tCap[i] = capMap.get(name) || 0; });
             const lessons = baseLessons.map(l => ({ ...l, day: null, period: null }));
             const lt = lessons.map(l => tIdx.get(l.teacher)), lc = lessons.map(l => cIdx.get(l.cls)), ls = lessons.map(l => sIdx.get(l.subject));
             const slotOf = new Int16Array(nL).fill(-1);
@@ -1168,6 +1199,7 @@
             const costCore = (i, s) => {
                 const d = (s / nP) | 0;
                 let c = W_CLASH * tOcc[lt[i] * nS + s] + W_SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + W_TDAY * tDay[lt[i] * nD + d] + adj(i, s);
+                if (tCap[lt[i]] && tDay[lt[i] * nD + d] >= tCap[lt[i]]) c += W_CAP;
                 if (dayOff[lt[i]] === d) c += W_OFF;
                 const m = tMask[lt[i] * nD + d], bit = 1 << (s % nP);
                 if (!(m & bit)) c += gapTable[m | bit] - gapTable[m];
@@ -1175,9 +1207,10 @@
             };
             const homeTerm = (i, s) => (hm[i] && need[lc[i]]) ? W_HOME * Math.max(0, need[lc[i]] - hmCnt[lc[i]] - (s % nP === 0 ? 1 : 0)) : 0;
             const costAt = (i, s) => costCore(i, s) + homeTerm(i, s);
+            const capOver = (i) => tCap[lt[i]] > 0 && tDay[lt[i] * nD + ((slotOf[i] / nP) | 0)] > tCap[lt[i]];
             const softOf = (i) => {
                 const s = slotOf[i], d = (s / nP) | 0;
-                return (dayOff[lt[i]] === d ? 1 : 0) + (subjDay[(lc[i] * nSub + ls[i]) * nD + d] > 1 ? 1 : 0) + (adj(i, s) ? 1 : 0) + (gapTable[tMask[lt[i] * nD + d]] > 0 ? 1 : 0)
+                return (capOver(i) ? 1 : 0) + (dayOff[lt[i]] === d ? 1 : 0) + (subjDay[(lc[i] * nSub + ls[i]) * nD + d] > 1 ? 1 : 0) + (adj(i, s) ? 1 : 0) + (gapTable[tMask[lt[i] * nD + d]] > 0 ? 1 : 0)
                     + (need[lc[i]] > hmCnt[lc[i]] && ((hm[i] && s % nP !== 0) || (!hm[i] && s % nP === 0)) ? 1 : 0);
             };
             const deltaSwap = (a, b) => {
@@ -1208,7 +1241,7 @@
             // 2) Hoán đổi tiết trong cùng lớp cho đến khi hết trùng giáo viên
             const t0 = performance.now(), MAX_ITER = 3000 + nL * 8;
             for (let iter = 0; iter < MAX_ITER && performance.now() - t0 < 500; iter++) {
-                const conf = []; for (const i of placed) if (tOcc[lt[i] * nS + slotOf[i]] > 1) conf.push(i);
+                const conf = []; for (const i of placed) if (tOcc[lt[i] * nS + slotOf[i]] > 1 || capOver(i)) conf.push(i);
                 if (!conf.length) break;
                 const a = conf[(Math.random() * conf.length) | 0], mates = byCls[lc[a]];
                 if (mates.length < 2) continue;
@@ -1237,6 +1270,15 @@
             // 4) Còn trùng GV thì gỡ tiết thừa ra để lưới luôn hợp lệ
             const seen = new Set();
             for (const i of placed) { const key = lt[i] * nS + slotOf[i]; if (seen.has(key)) del(i); else seen.add(key); }
+            // GV vẫn vượt số tiết tối đa/buổi: gỡ phần dư ra danh sách chưa xếp để không vi phạm giới hạn
+            if (tCap.some(Boolean)) {
+                const cnt = new Map();
+                for (const i of placed) {
+                    if (slotOf[i] < 0 || !tCap[lt[i]]) continue;
+                    const k = lt[i] * nD + ((slotOf[i] / nP) | 0), n = (cnt.get(k) || 0) + 1; cnt.set(k, n);
+                    if (n > tCap[lt[i]]) del(i);
+                }
+            }
 
             lessons.forEach((L, i) => { if (slotOf[i] >= 0) { L.day = DAYS[(slotOf[i] / nP) | 0]; L.period = PERIODS[slotOf[i] % nP]; } });
             const unplaced = lessons.filter(l => l.day === null);
@@ -1257,6 +1299,8 @@
             const tSlot = new Map(), cSlot = new Map();
             const teacherDay = new Map(), classDay = new Map(), subjDay = new Map();
             const bump = (m, k, n) => m.set(k, (m.get(k) || 0) + n);
+            const capMap = teacherCapMap();
+            const capRoom = (teacher, d) => { const c = capMap.get(teacher); return !c || (teacherDay.get(`${teacher}|${d}`) || 0) < c; };
 
             const dayOff = new Map();
             if (opts.dayOff) {
@@ -1274,7 +1318,7 @@
                 bump(teacherDay, `${L.teacher}|${L.day}`, -1); bump(classDay, `${L.cls}|${L.day}`, -1); bump(subjDay, `${L.cls}|${L.subject}|${L.day}`, -1);
                 L.day = null; L.period = null;
             };
-            const isFree = (L, d, p, ignoreOff) => slotAllowed(d, p) && (ignoreOff || d !== dayOff.get(L.teacher)) && !tSlot.has(key(L.teacher, d, p)) && !cSlot.has(key(L.cls, d, p));
+            const isFree = (L, d, p, ignoreOff) => slotAllowed(d, p) && (ignoreOff || d !== dayOff.get(L.teacher)) && !tSlot.has(key(L.teacher, d, p)) && !cSlot.has(key(L.cls, d, p)) && capRoom(L.teacher, d);
 
             const adjacentSame = (L, d, p) => {
                 const i = PERIODS.indexOf(p);
@@ -1309,12 +1353,29 @@
                     const tb = tSlot.get(key(L.teacher, d, p)), cb = cSlot.get(key(L.cls, d, p));
                     if (tb && cb) continue;
                     const B = tb || cb;
+                    if (!B) continue;
                     unplace(B);
+                    if (!capRoom(L.teacher, d)) { place(B, d, p); continue; }
+                    place(L, d, p);
                     for (const [d2, p2] of allSlots()) {
                         if (d2 === d && p2 === p) continue;
-                        if (isFree(B, d2, p2, false)) { place(L, d, p); place(B, d2, p2); return true; }
+                        if (isFree(B, d2, p2, false)) { place(B, d2, p2); return true; }
                     }
-                    place(B, d, p);
+                    unplace(L); place(B, d, p);
+                }
+                // Ô trống nhưng GV đã đủ số tiết tối đa/buổi hôm đó: dời một tiết khác của chính GV sang ngày còn chỗ
+                for (const [d, p] of allSlots()) {
+                    if (tSlot.has(key(L.teacher, d, p)) || cSlot.has(key(L.cls, d, p)) || capRoom(L.teacher, d)) continue;
+                    for (const M of shuffle(lessons.filter(x => x.day === d && x.teacher === L.teacher))) {
+                        const mp = M.period;
+                        unplace(M);
+                        place(L, d, p);
+                        for (const [d2, p2] of allSlots()) {
+                            if (d2 === d) continue;
+                            if (isFree(M, d2, p2, false)) { place(M, d2, p2); return true; }
+                        }
+                        unplace(L); place(M, d, mp);
+                    }
                 }
                 return false;
             };
@@ -1335,6 +1396,7 @@
                                 if (tSlot.has(key(teacher, d2, first))) continue;
                                 const X = cSlot.get(key(cls, d2, first)), d1 = A.day, p1 = A.period;
                                 if (X && (X.teacher === teacher || tSlot.has(key(X.teacher, d1, p1)))) continue;
+                                if (d2 !== d1 && (!capRoom(teacher, d2) || (X && !capRoom(X.teacher, d1)))) continue;
                                 if (!X) { unplace(A); place(A, d2, first); }
                                 else { unplace(A); unplace(X); place(A, d2, first); place(X, d1, p1); }
                                 have++; break;
@@ -1535,6 +1597,7 @@
             const nT = tIdx.size, nC = cIdx.size, nSub = sIdx.size;
             const lt = items.map(x => tIdx.get(x.teacher)), lc = items.map(x => cIdx.get(x.cls)), ls = items.map(x => sIdx.get(x.subject));
             const slotOf = new Int16Array(nL).fill(-1), tOcc = new Int16Array(nT * nS), tMask = new Uint8Array(nT * nD);
+            const tDay = new Int16Array(nT * nD), tCap = new Int8Array(nT), capMap = teacherCapMap(); tIdx.forEach((i, name) => { tCap[i] = capMap.get(name) || 0; });
             const subjDay = new Int16Array(nC * nSub * nD), cSlot = new Int16Array(nC * nS).fill(-1);
 
             // GVCN dạy tiết 1 lớp chủ nhiệm: giữ đủ số buổi (hoán đổi trong lớp không được làm mất)
@@ -1567,8 +1630,8 @@
                 dayTable[m] = c;
             }
 
-            const add = (i, sl) => { slotOf[i] = sl; const d = (sl / nP) | 0; if (++tOcc[lt[i] * nS + sl] === 1) tMask[lt[i] * nD + d] |= 1 << (sl % nP); subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + sl] = i; if (hm[i] && sl % nP === 0) hmCnt[lc[i]]++; };
-            const del = (i) => { const sl = slotOf[i], d = (sl / nP) | 0; if (hm[i] && sl % nP === 0) hmCnt[lc[i]]--; if (--tOcc[lt[i] * nS + sl] === 0) tMask[lt[i] * nD + d] &= ~(1 << (sl % nP)); subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + sl] = -1; slotOf[i] = -1; };
+            const add = (i, sl) => { slotOf[i] = sl; const d = (sl / nP) | 0; tDay[lt[i] * nD + d]++; if (++tOcc[lt[i] * nS + sl] === 1) tMask[lt[i] * nD + d] |= 1 << (sl % nP); subjDay[(lc[i] * nSub + ls[i]) * nD + d]++; cSlot[lc[i] * nS + sl] = i; if (hm[i] && sl % nP === 0) hmCnt[lc[i]]++; };
+            const del = (i) => { const sl = slotOf[i], d = (sl / nP) | 0; tDay[lt[i] * nD + d]--; if (hm[i] && sl % nP === 0) hmCnt[lc[i]]--; if (--tOcc[lt[i] * nS + sl] === 0) tMask[lt[i] * nD + d] &= ~(1 << (sl % nP)); subjDay[(lc[i] * nSub + ls[i]) * nD + d]--; cSlot[lc[i] * nS + sl] = -1; slotOf[i] = -1; };
             const adj = (i, sl) => {
                 if (!opts.noConsec) return 0;
                 const p = sl % nP; let c = 0;
@@ -1579,6 +1642,7 @@
             const costCore = (i, sl) => {
                 const d = (sl / nP) | 0, m = tMask[lt[i] * nD + d], bit = 1 << (sl % nP);
                 let c = W.CLASH * tOcc[lt[i] * nS + sl] + W.SUBJ * subjDay[(lc[i] * nSub + ls[i]) * nD + d] + adj(i, sl);
+                if (tCap[lt[i]] && tDay[lt[i] * nD + d] >= tCap[lt[i]]) c += W.CLASH;
                 if (!(m & bit)) c += dayTable[m | bit] - dayTable[m];
                 return c;
             };
@@ -1738,6 +1802,7 @@
             // GV trống tiết giữa các tiết dạy trong buổi: trống 1 tiết là cho phép, từ 2 tiết liền là lỗi
             const tHas = new Set(globalSchedule.map(x => `${x.teacher}|${x.day}|${x.period}`));
             const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+            const capMapChk = teacherCapMap();
             const tstat = new Map(); let gap1 = 0, gap2 = 0;
             Array.from(new Set(globalSchedule.map(x => x.teacher))).sort(collator.compare).forEach(name => DAYS.forEach(d => {
                 const used = PERIODS.map(pp => tHas.has(`${name}|${d}|${pp}`));
@@ -1751,7 +1816,9 @@
                     else gap1++;
                     k = e;
                 }
-                tstat.set(`${name}|${d}`, { n, long, single });
+                const cap = capMapChk.get(name) || 0, over = cap > 0 && n > cap;
+                if (over) issues.push({ teacher: name, text: `GV ${name} - Thứ ${d.slice(1)}: dạy ${n} tiết, vượt mức tối đa ${cap} tiết/buổi.` });
+                tstat.set(`${name}|${d}`, { n, long, single, cap, over });
             }));
             return { issues, stat, tstat, gap1, gap2 };
         }
@@ -1761,7 +1828,7 @@
             if (!sess) { el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có TKB để kiểm tra.</div>`; return; }
             const note = sess.gap1 ? `<div class="mt-1 text-[11px] text-gray-500">Còn ${sess.gap1} chỗ GV trống 1 tiết giữa hai tiết dạy (được phép).</div>` : '';
             if (!sess.issues.length) {
-                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt: tiết xếp liền từ tiết 1, mỗi buổi tối thiểu ${MIN_PERIODS} tiết, các lớp cùng khối có cùng số tiết mỗi buổi, GV không trống quá 1 tiết giữa các tiết dạy${homeroomConfig() ? ', GVCN dạy tiết 1 lớp chủ nhiệm đủ buổi' : ''}.</div>${note}`;
+                el.innerHTML = `<div class="text-xs rounded-lg border border-green-200 bg-green-50 text-green-800 p-2 leading-relaxed"><i class="fa-solid fa-circle-check mr-1"></i>Đạt: tiết xếp liền từ tiết 1, mỗi buổi tối thiểu ${MIN_PERIODS} tiết, các lớp cùng khối có cùng số tiết mỗi buổi, GV không trống quá 1 tiết giữa các tiết dạy${teacherCapMap().size ? ', GV không vượt số tiết tối đa/buổi đã chọn' : ''}${homeroomConfig() ? ', GVCN dạy tiết 1 lớp chủ nhiệm đủ buổi' : ''}.</div>${note}`;
                 return;
             }
             const shown = sess.issues.slice(0, 40);
@@ -1836,7 +1903,7 @@
             }
             html += `<tr class="bg-gray-50"><td colspan="2" class="border-b border-r p-2 text-xs font-semibold text-gray-600 sticky-col" style="left:0">Số tiết/buổi</td>`;
             DAYS.forEach(day => {
-                let n = '', tone = 'text-gray-500', tip = '';
+                let n = '', tone = 'text-gray-500', tip = '', capShow = 0;
                 if (selectedVal && viewType === 'class') {
                     const st = sess ? sess.stat.get(`${selectedVal}|${day}`) : null;
                     n = st ? st.n : 0;
@@ -1845,9 +1912,12 @@
                 } else if (selectedVal) {
                     const tst = sess ? sess.tstat.get(`${selectedVal}|${day}`) : null;
                     n = tst ? tst.n : 0;
-                    if (tst && tst.long.size) { tone = 'text-red-600 font-bold'; tip = 'Trống từ 2 tiết liền giữa các tiết dạy'; }
+                    capShow = teacherCap(selectedVal);
+                    if (capShow) tip = `Tối đa ${capShow} tiết/buổi`;
+                    if (tst && tst.over) { tone = 'text-red-600 font-bold'; tip = `Vượt mức tối đa ${capShow} tiết/buổi của giáo viên`; }
+                    else if (tst && tst.long.size) { tone = 'text-red-600 font-bold'; tip = 'Trống từ 2 tiết liền giữa các tiết dạy'; }
                 }
-                html += `<td class="border-b border-r p-2 text-sm ${tone}" title="${esc(tip)}">${n === 0 ? '–' : n}</td>`;
+                html += `<td class="border-b border-r p-2 text-sm ${tone}" title="${esc(tip)}">${n === 0 ? '–' : (capShow ? n + '/' + capShow : n)}</td>`;
             });
             html += `</tr>`;
             tbody.innerHTML = html;
@@ -1872,6 +1942,13 @@
                 c = clash(E, D.day, D.period);
                 if (c) return { ok: false, E, msg: `Lỗi: ${why(c, E)}.` };
             }
+            const capMsg = (L, toDay, fromDay) => {
+                if (toDay === fromDay) return '';
+                const cp = teacherCap(L.teacher);
+                return cp && teacherDayCount(L.teacher, toDay, ignore) >= cp ? `GV ${L.teacher} đã dạy đủ ${cp} tiết trong Thứ ${toDay.slice(1)} (tối đa ${cp} tiết/buổi).` : '';
+            };
+            const cm = capMsg(D, td, D.day) || (E ? capMsg(E, D.day, td) : '');
+            if (cm) return { ok: false, E, msg: `Lỗi: ${cm}` };
             return { ok: true, E, msg: '' };
         }
 
@@ -1946,10 +2023,19 @@
             poolList.sort((a, b) => collator.compare(a.subject, b.subject) || collator.compare(a.teacher, b.teacher) || collator.compare(a.cls, b.cls));
             if (poolSel && !poolList.some(e => e.key === poolSel)) poolSel = null;
         }
+        // GV đã đủ số tiết tối đa/buổi trong ngày d (theo chỉ mục ô đang bận) thì trả về mức tối đa, ngược lại 0
+        function capFullIdx(name, d) {
+            const c = teacherCap(name); if (!c) return 0;
+            let n = 0; PERIODS.forEach(p => { if (tBusyIdx.has(`${name}|${d}|${p}`)) n++; });
+            return n >= c ? c : 0;
+        }
         function placeConflict(e, d, p) {
             if (!slotAllowed(d, p)) return { kind: 'cap', s: null };
             const t = tBusyIdx.get(`${e.teacher}|${d}|${p}`), c = cBusyIdx.get(`${e.cls}|${d}|${p}`);
-            return t ? { kind: 'teacher', s: t } : c ? { kind: 'class', s: c } : null;
+            if (t) return { kind: 'teacher', s: t };
+            if (c) return { kind: 'class', s: c };
+            const cf = capFullIdx(e.teacher, d);
+            return cf ? { kind: 'tcap', s: null, cap: cf } : null;
         }
         function busyCount(map, name) { let n = 0; DAYS.forEach(d => PERIODS.forEach(p => { if (map.has(`${name}|${d}|${p}`)) n++; })); return n; }
 
@@ -1960,6 +2046,7 @@
             if (sel) {
                 const c = placeConflict(sel, d, p);
                 if (c) {
+                    if (c.kind === 'tcap') return { cls: ' pool-bad', html: `<div class="slot-busy" title="${esc(sel.teacher)} đã dạy đủ ${c.cap} tiết trong buổi này (tối đa ${c.cap} tiết/buổi)">Đủ ${c.cap} tiết/buổi</div>` };
                     const msg = c.kind === 'teacher' ? `GV bận: lớp ${c.s.cls}` : `Lớp bận: ${c.s.subject}`;
                     const tip = c.kind === 'teacher' ? `${sel.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}` : `Lớp ${sel.cls} đang học ${c.s.subject} với ${c.s.teacher}`;
                     return { cls: ' pool-bad', html: `<div class="slot-busy" title="${esc(tip)}">${esc(msg)}</div>` };
@@ -1970,12 +2057,14 @@
             const showFree = $('show-free').checked;
             if (viewType === 'class') {
                 if (!poolList.length) return null;
-                const free = poolList.filter(e => !tBusyIdx.has(`${e.teacher}|${d}|${p}`));
+                const free = poolList.filter(e => !tBusyIdx.has(`${e.teacher}|${d}|${p}`) && !capFullIdx(e.teacher, d));
                 if (!free.length) return { cls: '', html: `<div class="slot-busy" title="Mọi GV còn tiết ở lớp này đều đang bận lúc này">GV bận hết</div>` };
                 const chips = free.slice(0, 3).map(e => `<button type="button" class="free-chip" title="${esc(e.subject)} - ${esc(e.teacher)}: bấm để xếp vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(e)},'${d}','${p}')">${esc(e.subject)}: ${esc(shortName(e.teacher))}</button>`).join('');
                 return { cls: '', html: chips + (free.length > 3 ? `<div class="text-[10px] text-gray-400 text-center">+${free.length - 3} GV nữa</div>` : '') };
             }
             // Xem theo GV: các lớp đang rảnh ở ô này
+            const cf = capFullIdx(val, d);
+            if (cf && poolList.length) return { cls: '', html: `<div class="slot-busy" title="Giáo viên đã dạy đủ ${cf} tiết trong buổi này (mức tối đa đã chọn)">Đủ ${cf} tiết/buổi</div>` };
             const classes = poolList.filter(e => !cBusyIdx.has(`${e.cls}|${d}|${p}`));
             const chips = classes.slice(0, 3).map(e => `<button type="button" class="free-chip" title="${esc(e.subject)} - lớp ${esc(e.cls)}: bấm để xếp vào ${esc(slotLabel(d, p))}" onclick="placeEntry(${poolList.indexOf(e)},'${d}','${p}')">${esc(e.subject)}: lớp ${esc(e.cls)}</button>`).join('');
             if (chips) return { cls: '', html: (showFree ? `<div class="text-[10px] text-green-600 font-semibold text-center mb-0.5">Trống</div>` : '') + chips };
@@ -2053,7 +2142,7 @@
             const e = poolList[i]; if (!e) return;
             buildSlotIndex();
             const c = placeConflict(e, d, p);
-            if (c) return showToast(c.kind === 'cap' ? `Thứ ${d.slice(1)} chỉ xếp tối đa ${getDayCap(d)} tiết.` : c.kind === 'teacher' ? `Lỗi: GV ${e.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}.` : `Lỗi: Lớp ${e.cls} đang học ${c.s.subject} với ${c.s.teacher}.`, "error");
+            if (c) return showToast(c.kind === 'cap' ? `Thứ ${d.slice(1)} chỉ xếp tối đa ${getDayCap(d)} tiết.` : c.kind === 'tcap' ? `Lỗi: GV ${e.teacher} đã dạy đủ ${c.cap} tiết trong Thứ ${d.slice(1)} (tối đa ${c.cap} tiết/buổi).` : c.kind === 'teacher' ? `Lỗi: GV ${e.teacher} đang dạy ${c.s.subject} lớp ${c.s.cls}.` : `Lỗi: Lớp ${e.cls} đang học ${c.s.subject} với ${c.s.teacher}.`, "error");
             globalSchedule.push({ id: newCellId(), day: d, period: p, teacher: e.teacher, subject: e.subject, cls: e.cls, type: e.type });
             saveDataToStorage(); setMode('manual'); renderDataSummary(); renderTimetable();
             showToast(`Đã xếp ${e.subject} (${e.teacher}) vào ${slotLabel(d, p)}.`, "success");
@@ -2437,7 +2526,7 @@
             document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
         }
         // ================= NHẬP / XUẤT EXCEL DỮ LIỆU GIÁO VIÊN =================
-        const TEACHER_HEADS = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Môn', 'Lớp', 'Số tiết', 'Lớp chủ nhiệm'];
+        const TEACHER_HEADS = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Môn', 'Lớp', 'Số tiết', 'Lớp chủ nhiệm', 'Tiết tối đa/buổi'];
         const homeClsOf = t => { const d = (t.duties || []).find(x => x.name === 'GVCN' && x.cls); return d ? normCls(d.cls) : ''; };
         const dutyText = t => (t.duties || []).map(d => `${d.name}: ${d.period}`).join('; ');
         const xCell = (ref, style, v) => (v === '' || v == null) ? xBlank(ref, style) : xStr(ref, style, v);
@@ -2447,26 +2536,26 @@
             const out = [];
             teachers.forEach((t, ti) => {
                 const list = (t.teaching || []).length ? t.teaching : [null];
-                list.forEach((tc, k) => out.push({ stt: ti + 1, name: t.name, dept: t.dept || '', duty: k === 0 ? dutyText(t) : '', home: k === 0 ? homeClsOf(t) : '', sub: tc ? tc.sub : '', cls: tc ? tc.cls : '', prd: tc ? Number(tc.prd) : null }));
+                list.forEach((tc, k) => out.push({ stt: ti + 1, name: t.name, dept: t.dept || '', duty: k === 0 ? dutyText(t) : '', home: k === 0 ? homeClsOf(t) : '', maxs: k === 0 ? (normCap(t.maxPerSession) || '') : '', sub: tc ? tc.sub : '', cls: tc ? tc.cls : '', prd: tc ? Number(tc.prd) : null }));
             });
             return out;
         }
         function teacherAssignSheetXml(data, selected) {
-            const L = 'ABCDEFGH', rows = [`<row r="1" ht="24" customHeight="1">${TEACHER_HEADS.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
+            const L = 'ABCDEFGHI', rows = [`<row r="1" ht="24" customHeight="1">${TEACHER_HEADS.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
             data.forEach((d, i) => {
                 const r = i + 2;
-                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, d.stt)}${xCell(`B${r}`, XS.listL, d.name)}${xCell(`C${r}`, XS.listL, d.dept)}${xCell(`D${r}`, XS.listL, d.duty)}${xCell(`E${r}`, XS.listL, d.sub)}${xCell(`F${r}`, XS.listC, d.cls)}${d.prd == null ? xBlank(`G${r}`, XS.listC) : xNum(`G${r}`, XS.listC, d.prd)}${xCell(`H${r}`, XS.listC, d.home || '')}</row>`);
+                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, d.stt)}${xCell(`B${r}`, XS.listL, d.name)}${xCell(`C${r}`, XS.listL, d.dept)}${xCell(`D${r}`, XS.listL, d.duty)}${xCell(`E${r}`, XS.listL, d.sub)}${xCell(`F${r}`, XS.listC, d.cls)}${d.prd == null ? xBlank(`G${r}`, XS.listC) : xNum(`G${r}`, XS.listC, d.prd)}${xCell(`H${r}`, XS.listC, d.home || '')}${d.maxs ? xNum(`I${r}`, XS.listC, d.maxs) : xBlank(`I${r}`, XS.listC)}</row>`);
             });
-            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 18, 10, 9, 14], rows, merges: [], dimension: `A1:H${data.length + 1}`, freezeTopRow: true, landscapeFit: false });
+            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 18, 10, 9, 14, 16], rows, merges: [], dimension: `A1:I${data.length + 1}`, freezeTopRow: true, landscapeFit: false });
         }
         function teacherSummarySheetXml(teachers, selected) {
-            const heads = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Tiết kiêm nhiệm', 'Tiết dạy', 'Tổng tiết', 'Lớp chủ nhiệm'], L = 'ABCDEFGH';
+            const heads = ['STT', 'Họ và tên', 'Tổ chuyên môn', 'Kiêm nhiệm', 'Tiết kiêm nhiệm', 'Tiết dạy', 'Tổng tiết', 'Lớp chủ nhiệm', 'Tiết tối đa/buổi'], L = 'ABCDEFGHI';
             const rows = [`<row r="1" ht="24" customHeight="1">${heads.map((h, i) => xStr(`${L[i]}1`, XS.head, h)).join('')}</row>`];
             teachers.forEach((t, i) => {
                 const r = i + 2;
-                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, i + 1)}${xCell(`B${r}`, XS.listL, t.name)}${xCell(`C${r}`, XS.listL, t.dept || '')}${xCell(`D${r}`, XS.listL, dutyText(t))}${xNum(`E${r}`, XS.listC, round1(t.dutyPeriods))}${xNum(`F${r}`, XS.listC, round1(t.teachPeriods))}${xNum(`G${r}`, XS.listC, round1(t.total))}${xCell(`H${r}`, XS.listC, homeClsOf(t))}</row>`);
+                rows.push(`<row r="${r}">${xNum(`A${r}`, XS.listC, i + 1)}${xCell(`B${r}`, XS.listL, t.name)}${xCell(`C${r}`, XS.listL, t.dept || '')}${xCell(`D${r}`, XS.listL, dutyText(t))}${xNum(`E${r}`, XS.listC, round1(t.dutyPeriods))}${xNum(`F${r}`, XS.listC, round1(t.teachPeriods))}${xNum(`G${r}`, XS.listC, round1(t.total))}${xCell(`H${r}`, XS.listC, homeClsOf(t))}${normCap(t.maxPerSession) ? xNum(`I${r}`, XS.listC, normCap(t.maxPerSession)) : xBlank(`I${r}`, XS.listC)}</row>`);
             });
-            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 14, 10, 10, 14], rows, merges: [], dimension: `A1:H${teachers.length + 1}`, freezeTopRow: true, landscapeFit: false });
+            return xlsxSheetXml({ selected, cols: [6, 28, 24, 38, 14, 10, 10, 14, 16], rows, merges: [], dimension: `A1:I${teachers.length + 1}`, freezeTopRow: true, landscapeFit: false });
         }
         function buildTeacherXlsx(teachers) {
             const used = new Set();
@@ -2477,7 +2566,7 @@
         }
         function buildTeacherTemplateXlsx() {
             const demo = [
-                { name: 'Nguyễn Văn A', dept: 'Tổ Toán - Tin', duties: [{ name: 'GVCN', period: 4, cls: '10A1' }, { name: 'Tổ trưởng', period: 3 }], teaching: [{ sub: 'Toán', cls: '10A1', prd: 4 }, { sub: 'Toán', cls: '10A2', prd: 4 }] },
+                { name: 'Nguyễn Văn A', dept: 'Tổ Toán - Tin', duties: [{ name: 'GVCN', period: 4, cls: '10A1' }, { name: 'Tổ trưởng', period: 3 }], teaching: [{ sub: 'Toán', cls: '10A1', prd: 4 }, { sub: 'Toán', cls: '10A2', prd: 4 }], maxPerSession: 3 },
                 { name: 'Trần Thị B', dept: 'Tổ Ngữ văn', duties: [{ name: 'PBT Đoàn', period: 2 }], teaching: [{ sub: 'Ngữ văn', cls: '11A1', prd: 3 }, { sub: 'HĐTN-HN', cls: '11A1', prd: 3 }] }
             ];
             const guide = [
@@ -2488,7 +2577,8 @@
                 '4. Các tên có sẵn không ghi số tiết sẽ lấy mặc định: GVCN 4, Tổ trưởng 3, Tổ phó 1, BT Đoàn 6, PBT Đoàn 2.',
                 '5. Lớp viết liền, không dấu cách (VD: 10A1). Số tiết là số nguyên dương. Cột STT không bắt buộc.',
                 '6. Cột "Lớp chủ nhiệm" (không bắt buộc): ghi lớp mà giáo viên làm chủ nhiệm, viết ở dòng đầu của giáo viên đó. VD: 10A1. Dùng cho tùy chọn "GVCN dạy tiết 1 lớp chủ nhiệm". Ghi lớp mà chưa có GVCN trong cột Kiêm nhiệm thì phần mềm tự thêm GVCN.',
-                '7. Xóa 2 dòng mẫu trước khi nhập dữ liệu thật, rồi vào mục "Nhập Excel" trong phần mềm để chọn file này.'
+                '7. Cột "Tiết tối đa/buổi" (không bắt buộc): số tiết tối đa giáo viên được xếp trong 1 buổi (1 đến 4), viết ở dòng đầu của giáo viên đó. Để trống hoặc ghi 0 là không giới hạn.',
+                '8. Xóa 2 dòng mẫu trước khi nhập dữ liệu thật, rồi vào mục "Nhập Excel" trong phần mềm để chọn file này.'
             ];
             const grows = guide.map((t, i) => `<row r="${i + 1}" ht="${i === 0 ? 26 : 22}" customHeight="1">${xStr(`A${i + 1}`, i === 0 ? XS.head : XS.listL, t)}</row>`);
             const used = new Set();
@@ -2602,13 +2692,15 @@
             subject: ['mon', 'mon hoc', 'mon day', 'mon giang day'],
             cls: ['lop', 'lop day', 'lop phan cong', 'lop giang day'],
             prd: ['so tiet', 'tiet', 'so tiet tuan', 'so tiet day', 'tiet tuan', 'so tiet phan cong'],
-            home: ['lop chu nhiem', 'lop cn', 'lcn', 'chu nhiem lop', 'lop dang chu nhiem']
+            home: ['lop chu nhiem', 'lop cn', 'lcn', 'chu nhiem lop', 'lop dang chu nhiem'],
+            maxs: ['tiet toi da buoi', 'tiet toi da 1 buoi', 'so tiet toi da buoi', 'so tiet toi da 1 buoi', 'toi da tiet buoi', 'tiet toi da', 'gioi han tiet buoi']
         };
         function matchHeader(n) {
             if (!n) return null;
             for (const f of Object.keys(HEADER_SYNONYMS)) if (HEADER_SYNONYMS[f].includes(n)) return f;
             if (/^ho (va )?ten/.test(n) || /^ten (giao vien|gv)/.test(n)) return 'name';
             if (/^to( |$)/.test(n)) return 'dept';
+            if (/toi da/.test(n) && /(tiet|buoi)/.test(n)) return 'maxs';
             if (/kiem nhiem/.test(n) && !/tiet/.test(n)) return 'duty';
             if (/^mon( |$)/.test(n)) return 'subject';
             if (/^lop( |$)/.test(n)) return 'cls';
@@ -2649,7 +2741,7 @@
             let last = null, rowCount = 0;
             for (let r = hr + 1; r < grid.length; r++) {
                 const nameRaw = get(r, 'name').replace(/\s+/g, ' '), deptRaw = get(r, 'dept').replace(/\s+/g, ' '), dutyRaw = get(r, 'duty');
-                const sub = get(r, 'subject').replace(/\s+/g, ' '), cls = get(r, 'cls').replace(/\s+/g, '').toUpperCase(), prdRaw = get(r, 'prd'), homeRaw = normCls(get(r, 'home'));
+                const sub = get(r, 'subject').replace(/\s+/g, ' '), cls = get(r, 'cls').replace(/\s+/g, '').toUpperCase(), prdRaw = get(r, 'prd'), homeRaw = normCls(get(r, 'home')), maxRaw = get(r, 'maxs');
                 if (![nameRaw, deptRaw, dutyRaw, sub, cls, prdRaw, homeRaw].some(Boolean)) continue;
                 if (/^tong( cong)?$/.test(normVN(nameRaw))) continue;
                 rowCount++;
@@ -2661,6 +2753,11 @@
                 if (!t) { t = { name, dept: '', duties: [], teaching: [] }; teachers.set(key, t); }
                 if (deptRaw && !t.dept) t.dept = deptRaw;
                 if (homeRaw && !t.homeCls) t.homeCls = homeRaw;
+                if (maxRaw && t.maxPerSession === undefined) {
+                    const mv = Number(maxRaw.replace(',', '.'));
+                    if (Number.isInteger(mv) && mv >= 0 && mv <= PERIODS.length) t.maxPerSession = mv >= PERIODS.length ? 0 : mv;
+                    else warnings.push(`${name}: "Tiết tối đa/buổi" phải là số nguyên từ 1 đến ${PERIODS.length - 1} (0 là không giới hạn), đã bỏ qua giá trị này.`);
+                }
                 if (dutyRaw) {
                     const { list, bad } = parseDutyText(dutyRaw);
                     list.forEach(d => { if (!t.duties.some(x => x.name.toLowerCase() === d.name.toLowerCase())) t.duties.push(d); });
@@ -2685,7 +2782,7 @@
                 if (!g) { g = { name: 'GVCN', period: DUTY_PERIODS.GVCN }; t.duties.push(g); }
                 g.cls = hc;
             });
-            return { teachers, warnings, rowCount, hasDutyCol: map.duty !== undefined, hasDeptCol: map.dept !== undefined, hasHomeCol: map.home !== undefined };
+            return { teachers, warnings, rowCount, hasDutyCol: map.duty !== undefined, hasDeptCol: map.dept !== undefined, hasHomeCol: map.home !== undefined, hasMaxCol: map.maxs !== undefined };
         }
 
         // ----- Giao diện nhập -----
@@ -2775,6 +2872,7 @@
                 if (ex) {
                     if (it.teaching.length) ex.teaching = it.teaching.map(x => ({ ...x }));
                     if (P.hasDeptCol && it.dept) ex.dept = it.dept;
+                    if (P.hasMaxCol && it.maxPerSession !== undefined) ex.maxPerSession = normCap(it.maxPerSession);
                     if (P.hasDutyCol || P.hasHomeCol) {
                         const oldCls = ((ex.duties || []).find(d => d.name === 'GVCN') || {}).cls;
                         const keep = !P.hasDutyCol ? (ex.duties || []).filter(d => !it.duties.some(x => x.name === d.name)) : [];
@@ -2784,7 +2882,7 @@
                     }
                     recalc(ex); updated++;
                 } else {
-                    const t = { id: nextId(), name: it.name, dept: it.dept || 'Chưa phân tổ', duties: it.duties.map(d => ({ ...d })), teaching: it.teaching.map(x => ({ ...x })), teachPeriods: 0, dutyPeriods: 0, total: 0 };
+                    const t = { id: nextId(), name: it.name, dept: it.dept || 'Chưa phân tổ', duties: it.duties.map(d => ({ ...d })), teaching: it.teaching.map(x => ({ ...x })), teachPeriods: 0, dutyPeriods: 0, total: 0, maxPerSession: normCap(it.maxPerSession) };
                     recalc(t); list.push(t); added++;
                 }
             });
